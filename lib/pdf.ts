@@ -1,7 +1,7 @@
-import { pdf } from '@react-pdf/renderer';
+import { pdf, type DocumentProps } from '@react-pdf/renderer';
 import { InvoicePdfDocument } from '@/components/app/invoice-pdf-document';
 import type { Invoice } from './types';
-import { createElement } from 'react';
+import { createElement, type ReactElement } from 'react';
 
 function sanitizeFileNamePart(s: string): string {
   return s.replace(/[/\\?%*:|"<>]/g, '-').trim() || 'sheetpress';
@@ -13,7 +13,8 @@ export function pdfFileName(invoice: Invoice): string {
 }
 
 export async function renderInvoiceToBlob(invoice: Invoice): Promise<Blob> {
-  const doc = createElement(InvoicePdfDocument, { invoice });
+  // InvoicePdfDocument returns <Document>; cast to satisfy react-pdf's `pdf()` typing.
+  const doc = createElement(InvoicePdfDocument, { invoice }) as unknown as ReactElement<DocumentProps>;
   return pdf(doc).toBlob();
 }
 

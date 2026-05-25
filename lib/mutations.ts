@@ -17,6 +17,26 @@ export async function updateProfile(id: string, patch: Partial<Profile>): Promis
   await db.profiles.update(id, patch);
 }
 
+export async function setActiveProfile(id: string): Promise<void> {
+  await setSetting('activeProfileId', id);
+}
+
+/** Deletes a profile. Throws if this is the only profile or if any invoices reference it. */
+export async function deleteProfile(id: string): Promise<void> {
+  await db.transaction('rw', db.profiles, db.invoices, db.settings, async () => {
+    const all = await db.profiles.toArray();
+    if (all.length <= 1) throw new Error('Cannot delete your only profile.');
+    const used = await db.invoices.where('profileId').equals(id).count();
+    if (used > 0) throw new Error(`This profile is referenced by ${used} invoice(s). Delete or reassign them first.`);
+    await db.profiles.delete(id);
+    const active = await db.settings.get('activeProfileId');
+    if (active?.value === id) {
+      const fallback = (await db.profiles.toCollection().first())?.id;
+      if (fallback) await db.settings.put({ key: 'activeProfileId', value: fallback, updatedAt: now() });
+    }
+  });
+}
+
 // ---------- Clients ----------
 
 export async function createClient(input: Omit<Client, 'id' | 'createdAt'>): Promise<Client> {
@@ -41,8 +61,11 @@ export async function archiveClient(id: string): Promise<void> {
  * deleting a draft leaves a gap (per the permanent-numbering decision).
  */
 export async function createInvoiceDraft(): Promise<Invoice> {
-  return db.transaction('rw', db.profiles, db.invoices, async () => {
-    const profile = await db.profiles.toCollection().first();
+  return db.transaction('rw', db.profiles, db.invoices, db.settings, async () => {
+    const activeRow = await db.settings.get('activeProfileId');
+    const activeId = typeof activeRow?.value === 'string' ? activeRow.value : null;
+    const profile = (activeId ? await db.profiles.get(activeId) : null)
+      ?? (await db.profiles.toCollection().first());
     if (!profile) throw new Error('No profile found — onboarding is required first.');
 
     const counter = profile.nextInvoiceNumber;
@@ -71,6 +94,7 @@ export async function createInvoiceDraft(): Promise<Invoice> {
       lineItems: [
         { id: id(), description: '', quantity: 1, unitPrice: 0 } satisfies LineItem,
       ],
+      defaultTaxRate: profile.defaultTaxRate,
       notes: profile.defaultNotes,
       paymentInstructions: profile.defaultPaymentInstructions,
       status: 'draft',
@@ -201,7 +225,7 @@ export async function setSetting<T>(key: string, value: T): Promise<void> {
 // ---------- Bulk ops ----------
 
 export async function wipeAllData(): Promise<void> {
-  await db.transaction('rw', db.profiles, db.clients, db.invoices, db.payments, db.settings, async () => {
+  await db.transaction('rw', [db.profiles, db.clients, db.invoices, db.payments, db.settings], async () => {
     await Promise.all([
       db.profiles.clear(),
       db.clients.clear(),

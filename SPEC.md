@@ -244,10 +244,11 @@ type Address = {
 ### 6.7 Dashboard (small, intentionally)
 - Three numbers and a list. That's it.
   - **Outstanding:** sum of unpaid + partial invoice balances.
-  - **Paid this year:** for tax estimation.
+  - **Paid this year:** for tax estimation. Shows tax collected as a sub-line.
   - **Overdue count:** with link to filter.
+- A small year selector at the section header lets the user retroactively view any past year ("2026 so far · USD" → "2025 · USD"). Outstanding stays moment-in-time; everything else follows the selected year.
 - Below: 5 most recent invoices.
-- No charts. No "AI insights." If you need analytics, export to your accountant's tool.
+- No charts. No "AI insights." If you need deeper analytics, export to your accountant's tool (see §6.9).
 
 ### 6.8 Settings
 - **Profile(s):** edit your business info. Support multiple profiles (e.g., one DBA, one personal).
@@ -255,14 +256,16 @@ type Address = {
 - **Tax/region presets:** picking your country sets sensible labels (VAT ID vs. EIN vs. ABN) and default tax rate.
 - **Data:** Export all (JSON + ZIP of PDFs), Import, Wipe.
 
-### 6.9 Backup & restore
-- **Export:** single download — JSON with all profiles, clients, invoices, payments + bundled PDFs in a ZIP.
-- **Import:** drop the ZIP back in. Idempotent (no dupes on re-import, matched by invoice number + issue date).
+### 6.9 Backup & restore + tax-year export
+- **Full backup:** single download — JSON with all profiles, clients, invoices, payments + `invoices.csv` + `payments.csv` + bundled PDFs in a ZIP.
+- **Tax-year export:** pick a year → ZIP scoped to that year (invoices issued OR paid in the year, plus payments dated in the year). Same CSVs + PDFs + a README. Filename: `sheetpress-{year}-tax.zip`. This is the answer to "send something to your accountant."
+- **Import:** drop a full-backup ZIP back in. Idempotent (no dupes on re-import, matched by invoice number + issue date).
 - **Reminder:** banner if last export was >30 days ago.
 
 ### 6.10 Compliance touch points (built-in, not optional)
-- **Sequential numbering** — enforced; gaps require user confirmation (e.g., voiding 2026-005 must show "this leaves a gap, that's legal but unusual, continue?").
-- **Required fields per region.** Picking "Region: EU" turns on: VAT ID display, line-item tax mode, intra-community-supply reminder.
+- **Sequential numbering** — enforced; the void confirmation explicitly says the number stays consumed ("legal but unusual").
+- **Region presets.** Settings → Region applies tax ID label, default tax rate, and default currency in one move (per checkbox). Defaults the user controls.
+- **Intra-community supply reminder.** When the seller's profile country and the client's country are both in the EU, the countries differ, and the seller has a VAT ID, the PDF and preview show: *"Intra-community supply — VAT reverse charge, Article 196 of Directive 2006/112/EC."*
 - **Frozen snapshots** on issue (see §5).
 - **Void, never delete.** Once an invoice is `sent`, you can `void` it but not erase it. The PDF still exists; the void is recorded.
 
@@ -361,7 +364,7 @@ A few decisions I'd flag for your input before we start building:
 2. **Multi-profile from v1, or single profile?** Multi adds maybe 4 hours of work; matters if you ever do contract work under a separate entity. Recommend: yes, but UI hides the picker if only one exists.
 3. **Hosted demo policy.** Vercel free tier is fine for a demo, but if it goes viral, costs could spike. Plan: hosted demo uses *example* data only — real use requires self-host or local-only. Or: accept Vercel costs as the marketing budget.
 4. **License.** MIT (most permissive) vs. AGPL (forces forks/hosted versions to stay open). I'd default to MIT unless you specifically want to prevent someone from running a closed SaaS fork.
-5. **PWA / installable?** Cheap to add (a manifest + service worker), turns the app into a desktop-feeling tool. Recommend: yes for v0.4.
+5. **PWA / installable?** ✅ Shipped: manifest + icons. The app is installable on iOS, Android, and desktop browsers. No service worker yet — the local-first nature already covers offline use after first load.
 
 ---
 

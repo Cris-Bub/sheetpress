@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { Inter, Fraunces } from 'next/font/google';
 import { Toaster } from '@/components/ui/sonner';
 import { DevHelper } from '@/components/app/dev-helper';
@@ -22,6 +22,20 @@ const serif = Fraunces({
 export const metadata: Metadata = {
   title: 'sheetPress — invoicing for freelancers',
   description: 'Make an invoice. Get a PDF. Track who paid. That’s it.',
+  appleWebApp: {
+    capable: true,
+    title: 'sheetPress',
+    statusBarStyle: 'default',
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: '#fbf9f4' },
+    { media: '(prefers-color-scheme: dark)', color: '#252525' },
+  ],
+  width: 'device-width',
+  initialScale: 1,
 };
 
 export default function RootLayout({

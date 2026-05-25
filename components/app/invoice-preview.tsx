@@ -1,5 +1,6 @@
 import type { Invoice } from '@/lib/types';
 import { computeTotals, formatDate, formatMoney, lineSubtotal } from '@/lib/format';
+import { isIntraCommunitySupply } from '@/lib/derive';
 import { cn } from '@/lib/utils';
 
 function Address({
@@ -41,7 +42,11 @@ export function InvoicePreview({ invoice, className }: { invoice: Invoice; class
       <div className="flex items-start justify-between gap-8">
         <div>
           <div className="font-serif text-[28pt] leading-none tracking-tight">Invoice</div>
-          <div className="mt-1.5 font-mono text-[10pt] text-zinc-500">{invoice.number}</div>
+          <div
+            className="mt-2 h-[3px] w-12 rounded-full"
+            style={{ background: invoice.profileSnapshot.accentColor || '#1a1a1a' }}
+          />
+          <div className="mt-2 font-mono text-[10pt] text-zinc-500">{invoice.number}</div>
         </div>
         <div className="text-right">
           <div className="text-[11pt] font-medium">{p.businessName}</div>
@@ -129,6 +134,13 @@ export function InvoicePreview({ invoice, className }: { invoice: Invoice; class
           </div>
         </div>
       </div>
+
+      {/* Intra-community supply reminder (EU↔EU B2B) */}
+      {isIntraCommunitySupply(invoice) ? (
+        <div className="mt-6 border-l-2 border-zinc-300 pl-3 py-1 text-[9pt] text-zinc-600 italic">
+          Intra-community supply — VAT reverse charge, Article 196 of Directive 2006/112/EC.
+        </div>
+      ) : null}
 
       {/* Notes + payment instructions */}
       <div className="mt-auto pt-10 grid grid-cols-2 gap-8 text-[9.5pt] text-zinc-600">

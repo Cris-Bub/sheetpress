@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useState } from 'react';
 import { ArrowUpRight } from 'lucide-react';
 import { PageHeader } from '@/components/app/page-header';
 import { StatusBadge } from '@/components/app/status-badge';
@@ -9,6 +10,13 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/app/empty-state';
 import { ProportionBar, ProgressBar, LegendDot } from '@/components/app/proportion-bar';
 import { SparkBars } from '@/components/app/spark-bars';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { useInvoices, usePayments, useProfile, isLoaded } from '@/lib/queries';
 import {
   outstandingByCurrency,
@@ -22,6 +30,8 @@ import {
   monthlyPaymentsForYear,
   paymentRatio,
   daysOverdue,
+  availableYears,
+  taxCollectedByCurrency,
 } from '@/lib/derive';
 import { computeTotals, formatDate, formatMoney } from '@/lib/format';
 import type { InvoiceStatus } from '@/lib/types';
@@ -40,6 +50,8 @@ export default function Dashboard() {
   const profile = useProfile();
   const invoices = useInvoices();
   const payments = usePayments();
+  const currentYear = new Date().getFullYear();
+  const [selectedYear, setSelectedYear] = useState<number>(currentYear);
 
   if (!isLoaded(profile) || !isLoaded(invoices) || !isLoaded(payments)) {
     return (
@@ -80,8 +92,10 @@ export default function Dashboard() {
   }
 
   const now = new Date();
-  const year = now.getFullYear();
+  const year = selectedYear;
+  const isCurrentYear = year === currentYear;
   const currency = profile?.defaultCurrency ?? 'USD';
+  const years = availableYears(invoices, payments, now);
 
   const outstandingAll = outstandingByCurrency(invoices, payments);
   const outstanding = pickCurrency(outstandingAll, currency);
@@ -91,6 +105,10 @@ export default function Dashboard() {
   const paid = pickCurrency(paidAll, currency);
   const paidOthers = otherCurrencies(paidAll, currency);
 
+  const taxAll = taxCollectedByCurrency(invoices, payments, year);
+  const taxCollected = pickCurrency(taxAll, currency);
+  const taxOthers = otherCurrencies(taxAll, currency);
+
   const overdue = overdueCount(invoices, payments, now);
   const oldestOverdue = invoices
     .filter((i) => effectiveStatus(i, payments, now) === 'overdue')
@@ -99,7 +117,7 @@ export default function Dashboard() {
 
   const breakdown = ytdBreakdown(invoices, payments, year, currency, now);
   const monthly = monthlyPaymentsForYear(invoices, payments, year, currency);
-  const currentMonth = now.getMonth();
+  const currentMonth = isCurrentYear ? now.getMonth() : -1;
 
   const recent = [...invoices]
     .sort((a, b) => b.issueDate.localeCompare(a.issueDate))
@@ -113,10 +131,35 @@ export default function Dashboard() {
 
       <div className="px-8 py-10 max-w-5xl">
         <section className="mb-10">
-          <div className="flex items-baseline justify-between mb-3">
-            <h2 className="text-xs uppercase tracking-wider text-muted-foreground">
-              {year} so far · {currency}
-            </h2>
+          <div className="flex items-baseline justify-between mb-3 gap-3">
+            <div className="flex items-center gap-2">
+              <Select
+                value={String(year)}
+                onValueChange={(v) => {
+                  if (v) setSelectedYear(parseInt(v, 10));
+                }}
+              >
+                <SelectTrigger
+                  size="sm"
+                  aria-label="Select year"
+                  className="h-6 px-2 text-xs uppercase tracking-wider text-muted-foreground border-0 bg-transparent hover:bg-muted/50 -ml-2"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent align="start">
+                  {years.map((y) => (
+                    <SelectItem key={y} value={String(y)}>
+                      {y}
+                      {y === currentYear ? ' (current)' : ''}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <span className="text-xs uppercase tracking-wider text-muted-foreground">
+                {isCurrentYear ? 'so far · ' : '· '}
+                {currency}
+              </span>
+            </div>
             <span className="text-xs text-muted-foreground tabular-nums">
               {formatMoney(breakdown.total, currency)} invoiced
             </span>
@@ -174,6 +217,14 @@ export default function Dashboard() {
             <div className="mt-3 font-serif text-4xl leading-none tabular-nums">
               {formatMoney(paid, currency)}
             </div>
+            {taxCollected > 0 || taxOthers.length > 0 ? (
+              <div className="mt-1.5 text-[11px] text-muted-foreground tabular-nums">
+                incl. {formatMoney(taxCollected, currency)} tax
+                {taxOthers.length > 0
+                  ? ` (+ ${taxOthers.map((m) => formatMoney(m.amount, m.currency)).join(' · ')})`
+                  : ''}
+              </div>
+            ) : null}
             <div className="mt-4">
               <SparkBars
                 values={monthly}

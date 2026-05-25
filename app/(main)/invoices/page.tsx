@@ -22,9 +22,11 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/app/empty-state';
 import { computeTotals, formatDate, formatMoney } from '@/lib/format';
 import { downloadInvoicePdf } from '@/lib/pdf';
-import { duplicateInvoice } from '@/lib/mutations';
+import { duplicateInvoice, voidInvoice } from '@/lib/mutations';
 import { toast } from 'sonner';
 import { useRouter } from 'next/navigation';
+import { ConfirmDialog } from '@/components/app/confirm-dialog';
+import { RecordPaymentDialog } from '@/components/app/record-payment-dialog';
 import type { InvoiceStatus, Invoice } from '@/lib/types';
 
 const FILTERS: { value: 'all' | InvoiceStatus; label: string }[] = [
@@ -39,6 +41,9 @@ const FILTERS: { value: 'all' | InvoiceStatus; label: string }[] = [
 export default function InvoicesPage() {
   const [filter, setFilter] = useState<'all' | InvoiceStatus>('all');
   const [q, setQ] = useState('');
+  const [voidingInv, setVoidingInv] = useState<Invoice | null>(null);
+  const [voidWorking, setVoidWorking] = useState(false);
+  const [payingInv, setPayingInv] = useState<Invoice | null>(null);
   const router = useRouter();
 
   const invoices = useInvoices();
@@ -59,6 +64,20 @@ export default function InvoicesPage() {
       router.push(`/invoices/${dup.id}/edit`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Could not duplicate');
+    }
+  };
+
+  const handleVoid = async () => {
+    if (!voidingInv) return;
+    setVoidWorking(true);
+    try {
+      await voidInvoice(voidingInv.id);
+      toast.success(`Invoice ${voidingInv.number} voided.`);
+      setVoidingInv(null);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not void');
+    } finally {
+      setVoidWorking(false);
     }
   };
 
@@ -223,14 +242,19 @@ export default function InvoicesPage() {
                               <Copy className="size-4" /> Duplicate
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
-                            {status !== 'paid' ? (
-                              <DropdownMenuItem>
+                            {status !== 'paid' && status !== 'void' && status !== 'draft' ? (
+                              <DropdownMenuItem onClick={() => setPayingInv(inv)}>
                                 <CheckCircle2 className="size-4" /> Mark paid
                               </DropdownMenuItem>
                             ) : null}
-                            <DropdownMenuItem className="text-destructive">
-                              <Ban className="size-4" /> Void
-                            </DropdownMenuItem>
+                            {status !== 'void' && status !== 'draft' ? (
+                              <DropdownMenuItem
+                                className="text-destructive"
+                                onClick={() => setVoidingInv(inv)}
+                              >
+                                <Ban className="size-4" /> Void
+                              </DropdownMenuItem>
+                            ) : null}
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </td>
@@ -242,6 +266,30 @@ export default function InvoicesPage() {
           </div>
         )}
       </div>
+      <ConfirmDialog
+        open={voidingInv !== null}
+        onOpenChange={(open) => { if (!open) setVoidingInv(null); }}
+        title={voidingInv ? `Void invoice ${voidingInv.number}?` : ''}
+        description={
+          voidingInv
+            ? `It stays on your books with status 'void' — this can't be undone. ` +
+              `The number ${voidingInv.number} stays consumed; future invoices will skip it. ` +
+              `That's legal but unusual.`
+            : ''
+        }
+        confirmLabel="Void invoice"
+        destructive
+        busy={voidWorking}
+        onConfirm={handleVoid}
+      />
+      {payingInv ? (
+        <RecordPaymentDialog
+          invoice={payingInv}
+          balance={computeTotals(payingInv).total - paidAmountFor(payingInv.id, payments)}
+          open={payingInv !== null}
+          onOpenChange={(open) => { if (!open) setPayingInv(null); }}
+        />
+      ) : null}
     </>
   );
 }

@@ -24,6 +24,7 @@ export type Profile = {
   defaultPaymentTermsDays: number;
   defaultNotes?: string;
   defaultCurrency: string;
+  defaultTaxRate?: number; // percent — applied as the new-invoice default if set
   accentColor: string;
   invoiceNumberFormat: string;
   nextInvoiceNumber: number;

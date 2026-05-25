@@ -271,7 +271,11 @@ export function InvoiceDetailView({ id }: { id: string }) {
         open={voiding}
         onOpenChange={setVoiding}
         title={`Void invoice ${invoice.number}?`}
-        description="It stays on your books with status 'void' — this can't be undone."
+        description={
+          `It stays on your books with status 'void' — this can't be undone. ` +
+          `The number ${invoice.number} stays consumed; future invoices will skip it. ` +
+          `That's legal but unusual.`
+        }
         confirmLabel="Void invoice"
         destructive
         busy={working}

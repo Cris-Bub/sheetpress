@@ -9,7 +9,7 @@ import type { Client, Invoice, Payment, Profile } from './types';
  * Dev Helper — never called from end-user flows.
  */
 export async function loadSampleData(): Promise<void> {
-  await db.transaction('rw', db.profiles, db.clients, db.invoices, db.payments, db.settings, async () => {
+  await db.transaction('rw', [db.profiles, db.clients, db.invoices, db.payments, db.settings], async () => {
     await Promise.all([
       db.profiles.clear(),
       db.clients.clear(),

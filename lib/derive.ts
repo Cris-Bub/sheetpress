@@ -53,7 +53,7 @@ export function paidThisYearByCurrency(invoices: Invoice[], payments: Payment[],
   for (const p of payments) {
     if (new Date(p.date).getFullYear() !== year) continue;
     const inv = invoices.find((i) => i.id === p.invoiceId);
-    if (!inv) continue;
+    if (!inv || inv.status === 'void') continue;
     add(m, inv.currency, p.amount);
   }
   return Array.from(m.entries()).map(([currency, amount]) => ({ currency, amount }));
@@ -109,8 +109,55 @@ export function monthlyPaymentsForYear(
     const d = new Date(p.date);
     if (d.getFullYear() !== year) continue;
     const inv = invoices.find((i) => i.id === p.invoiceId);
-    if (!inv || inv.currency !== currency) continue;
+    if (!inv || inv.currency !== currency || inv.status === 'void') continue;
     months[d.getMonth()] += p.amount;
   }
   return months;
+}
+
+/** EU member states (ISO 3166-1 alpha-2). Used to detect intra-community supplies. */
+const EU_COUNTRIES = new Set([
+  'AT', 'BE', 'BG', 'CY', 'CZ', 'DE', 'DK', 'EE', 'ES', 'FI',
+  'FR', 'GR', 'HR', 'HU', 'IE', 'IT', 'LT', 'LU', 'LV', 'MT',
+  'NL', 'PL', 'PT', 'RO', 'SE', 'SI', 'SK',
+]);
+
+/** True if the seller (profile) and client are in two different EU member states
+ *  and the seller has a VAT ID — a reverse-charge / intra-community supply scenario. */
+export function isIntraCommunitySupply(invoice: Invoice): boolean {
+  const sellerCountry = invoice.profileSnapshot.address?.country?.toUpperCase();
+  const buyerCountry = invoice.clientSnapshot?.address?.country?.toUpperCase();
+  if (!sellerCountry || !buyerCountry) return false;
+  if (!EU_COUNTRIES.has(sellerCountry) || !EU_COUNTRIES.has(buyerCountry)) return false;
+  if (sellerCountry === buyerCountry) return false;
+  if (!invoice.profileSnapshot.taxId) return false;
+  return true;
+}
+
+/** Years that have any invoice or payment activity. Current year always included. Descending. */
+export function availableYears(invoices: Invoice[], payments: Payment[], now = new Date()): number[] {
+  const years = new Set<number>([now.getFullYear()]);
+  for (const inv of invoices) years.add(new Date(inv.issueDate).getFullYear());
+  for (const p of payments) years.add(new Date(p.date).getFullYear());
+  return Array.from(years).sort((a, b) => b - a);
+}
+
+/** Total tax collected on the PAID portion of invoices in a given year, by currency.
+ *  Tax is allocated pro-rata: a half-paid invoice contributes half its tax. */
+export function taxCollectedByCurrency(
+  invoices: Invoice[],
+  payments: Payment[],
+  year: number,
+): Money[] {
+  const m = new Map<string, number>();
+  for (const p of payments) {
+    if (new Date(p.date).getFullYear() !== year) continue;
+    const inv = invoices.find((i) => i.id === p.invoiceId);
+    if (!inv || inv.status === 'void') continue;
+    const totals = computeTotals(inv);
+    if (totals.total === 0) continue;
+    const share = (p.amount / totals.total) * totals.tax;
+    add(m, inv.currency, Math.round(share));
+  }
+  return Array.from(m.entries()).map(([currency, amount]) => ({ currency, amount }));
 }

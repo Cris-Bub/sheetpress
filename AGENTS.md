@@ -141,13 +141,19 @@ These docs are how future contributors (and future agents) avoid re-deriving the
 - All 12 steps in the SPEC verification script pass end-to-end.
 - All 6 screens render against live Dexie data with skeleton/empty states.
 - Autosave, status mutations, payments, PDF download, backup ZIP round-trip, dark mode, dev helper.
+- **Tax-season package:** dashboard year selector, tax-collected sub-line on the Paid tile, per-client "Paid in {year}" on cards + detail, CSV exports inside the full backup, `exportTaxYear()` mutation + Settings UI.
+- **Settings completeness:** logo upload (FileReader → `profile.logoDataUrl`), default tax rate field, region preset that fills label + rate + currency via checkboxes.
+- **Editor keyboard shortcuts:** Cmd+Enter or Cmd+S → mark sent; Cmd+D → download PDF. Inline `<kbd>` hints on buttons (desktop only).
+- **Mobile pass:** sidebar collapses to a slide-in drawer with a hamburger top bar below `md`; editor split collapses to an Edit/Preview tab switcher below `lg`. Layout's flex direction flips to `flex-col` below `md` so the top bar stacks above main.
+- **PWA installable:** `app/icon.tsx`, `app/apple-icon.tsx`, `app/manifest.ts`. Theme-color metadata via the root `viewport` export. No service worker.
+- **EU intra-community supply note:** `lib/derive.ts/isIntraCommunitySupply(invoice)` returns true for EU↔EU B2B with a seller VAT ID; preview and PDF render the reverse-charge note when it does.
+- **Multi-profile:** `useProfiles()`, `useActiveProfileId()`, `setActiveProfile()`, `deleteProfile()`. Active profile is stored under settings key `activeProfileId` and falls back to "first profile" when unset. Settings → Profile has an Active profile picker + Add/Delete actions. `createInvoiceDraft()` uses the active profile.
 
 **Not yet built (worth doing, low risk):**
-- **Mobile pass.** Editor's split view should collapse to a tabbed single-pane on `< md`. Sidebar should become a sheet.
-- **Logo upload** in Settings → Profile. Field exists in `Profile.logoDataUrl`; just needs a UI.
-- **Region preset auto-fill** in Settings — picking a region currently only sets the tax-ID label; it should also nudge the default tax rate and currency.
-- **Keyboard shortcuts beyond Cmd+Enter** — `Cmd+D` to download PDF, `Cmd+K` for a global command palette, etc. per SPEC §6.2.
 - **Form validation in onboarding** — currently just checks non-empty + email regex; should use Zod via `@hookform/resolvers/zod` consistently.
+- **Cmd+K command palette** per SPEC §6.2.
+- **Service worker** for true offline-first PWA (currently only manifest + icons).
+- **"From" picker in the editor** when more than one profile exists. Currently the editor's preview pulls from the live `useProfile()` (active profile), not the invoice's saved `profileSnapshot`. Fine for single-profile users; for multi-profile, the editor should let you switch the source profile of a draft.
 
 **Known limitations (intentional, see DESIGN.md / SPEC.md for the reasoning):**
 - PDF uses built-in fonts, not Fraunces.

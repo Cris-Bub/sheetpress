@@ -3,11 +3,31 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from './db';
 
-/** Returns the active profile (v1 has at most one). undefined while loading; null when none exists. */
+/** Returns the currently active profile. Falls back to the first if no active is set.
+ *  undefined while loading; null when no profiles exist. */
 export function useProfile() {
   return useLiveQuery(async () => {
+    const activeRow = await db.settings.get('activeProfileId');
+    const activeId = typeof activeRow?.value === 'string' ? activeRow.value : null;
+    if (activeId) {
+      const found = await db.profiles.get(activeId);
+      if (found) return found;
+    }
     const p = await db.profiles.toCollection().first();
     return p ?? null;
+  }, []);
+}
+
+/** Returns all profiles, name-sorted. undefined while loading. */
+export function useProfiles() {
+  return useLiveQuery(() => db.profiles.toArray(), []);
+}
+
+/** Returns just the active profile id (or null). */
+export function useActiveProfileId() {
+  return useLiveQuery(async () => {
+    const row = await db.settings.get('activeProfileId');
+    return typeof row?.value === 'string' ? row.value : null;
   }, []);
 }
 

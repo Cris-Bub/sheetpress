@@ -2,7 +2,8 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, FileText, Users, Settings, Plus } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { LayoutDashboard, FileText, Users, Settings, Plus, Menu, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
@@ -13,56 +14,138 @@ const items = [
   { href: '/settings', label: 'Settings', icon: Settings },
 ];
 
-export function AppSidebar() {
-  const pathname = usePathname();
-
+function NavLinks({ pathname, onNavigate }: { pathname: string; onNavigate?: () => void }) {
   return (
-    <aside className="hidden md:flex w-[220px] shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground">
+    <ul className="space-y-0.5">
+      {items.map((item) => {
+        const active = item.exact ? pathname === item.href : pathname.startsWith(item.href);
+        const Icon = item.icon;
+        return (
+          <li key={item.href}>
+            <Link
+              href={item.href}
+              onClick={onNavigate}
+              className={cn(
+                'flex items-center gap-3 rounded-md px-3 py-1.5 text-sm transition-colors',
+                active
+                  ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium'
+                  : 'text-muted-foreground hover:bg-sidebar-accent/60 hover:text-foreground',
+              )}
+            >
+              <Icon className="size-4" />
+              {item.label}
+            </Link>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+function SidebarContent({ pathname, onNavigate }: { pathname: string; onNavigate?: () => void }) {
+  return (
+    <>
       <div className="px-5 pt-6 pb-4">
-        <Link href="/" className="inline-flex items-baseline gap-1">
+        <Link href="/" onClick={onNavigate} className="inline-flex items-baseline gap-1">
           <span className="font-serif text-2xl leading-none tracking-tight">sheet</span>
           <span className="font-serif text-2xl leading-none tracking-tight italic text-muted-foreground">press</span>
         </Link>
       </div>
 
       <div className="px-3">
-        <Button render={<Link href="/invoices/new" />} className="w-full justify-start gap-2 h-9 shadow-none">
+        <Button
+          render={<Link href="/invoices/new" onClick={onNavigate} />}
+          className="w-full justify-start gap-2 h-9 shadow-none"
+        >
           <Plus className="size-4" />
           New invoice
         </Button>
       </div>
 
       <nav className="mt-6 flex-1 px-2">
-        <ul className="space-y-0.5">
-          {items.map((item) => {
-            const active = item.exact ? pathname === item.href : pathname.startsWith(item.href);
-            const Icon = item.icon;
-            return (
-              <li key={item.href}>
-                <Link
-                  href={item.href}
-                  className={cn(
-                    'flex items-center gap-3 rounded-md px-3 py-1.5 text-sm transition-colors',
-                    active
-                      ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium'
-                      : 'text-muted-foreground hover:bg-sidebar-accent/60 hover:text-foreground',
-                  )}
-                >
-                  <Icon className="size-4" />
-                  {item.label}
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
+        <NavLinks pathname={pathname} onNavigate={onNavigate} />
       </nav>
 
       <div className="p-4 text-xs text-muted-foreground">
         <p>Your data lives on this device.</p>
-        <Link href="/settings" className="underline-offset-4 hover:underline">
+        <Link href="/settings" onClick={onNavigate} className="underline-offset-4 hover:underline">
           Back up now →
         </Link>
       </div>
-    </aside>
+    </>
+  );
+}
+
+export function AppSidebar() {
+  const pathname = usePathname();
+  const [open, setOpen] = useState(false);
+
+  // Lock body scroll while open.
+  useEffect(() => {
+    if (!open) return;
+    const original = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = original;
+    };
+  }, [open]);
+
+  // Esc to close.
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open]);
+
+  return (
+    <>
+      {/* Mobile top bar */}
+      <header className="md:hidden sticky top-0 z-20 flex items-center justify-between h-12 px-3 border-b border-border bg-background/95 backdrop-blur">
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          aria-label="Open menu"
+          className="size-9 inline-flex items-center justify-center rounded-md hover:bg-muted"
+        >
+          <Menu className="size-5" />
+        </button>
+        <Link href="/" className="inline-flex items-baseline gap-1">
+          <span className="font-serif text-xl leading-none tracking-tight">sheet</span>
+          <span className="font-serif text-xl leading-none tracking-tight italic text-muted-foreground">press</span>
+        </Link>
+        <Button render={<Link href="/invoices/new" />} size="sm" className="h-8 px-2.5">
+          <Plus className="size-3.5" />
+        </Button>
+      </header>
+
+      {/* Mobile drawer */}
+      {open ? (
+        <div className="fixed inset-0 z-30 md:hidden" role="dialog" aria-modal="true">
+          <div
+            className="absolute inset-0 bg-foreground/40 backdrop-blur-sm animate-in fade-in-0"
+            onClick={() => setOpen(false)}
+          />
+          <aside className="absolute inset-y-0 left-0 w-[260px] max-w-[80vw] flex flex-col bg-sidebar text-sidebar-foreground border-r border-sidebar-border shadow-xl animate-in slide-in-from-left duration-200">
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              aria-label="Close menu"
+              className="absolute top-2.5 right-2.5 size-8 inline-flex items-center justify-center rounded-md hover:bg-sidebar-accent"
+            >
+              <X className="size-4" />
+            </button>
+            <SidebarContent pathname={pathname} onNavigate={() => setOpen(false)} />
+          </aside>
+        </div>
+      ) : null}
+
+      {/* Desktop sidebar */}
+      <aside className="hidden md:flex w-[220px] shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground">
+        <SidebarContent pathname={pathname} />
+      </aside>
+    </>
   );
 }

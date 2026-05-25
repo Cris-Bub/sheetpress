@@ -36,7 +36,7 @@ import { CreateClientDialog } from '@/components/app/create-client-dialog';
 import { useClients, useProfile, isLoaded } from '@/lib/queries';
 import { computeTotals, formatMoney, toMajor, toMinor } from '@/lib/format';
 import { cn } from '@/lib/utils';
-import type { Client, Invoice, LineItem, Profile } from '@/lib/types';
+import type { Client, Invoice, LineItem } from '@/lib/types';
 
 const CURRENCIES = ['USD', 'EUR', 'GBP', 'CAD', 'AUD', 'CHF', 'SEK', 'DKK', 'NOK', 'JPY'];
 
@@ -85,6 +85,7 @@ export function InvoiceEditor({ existing }: { existing: Invoice }) {
   const [state, setState] = useState<EditorState>(() => stateFromInvoice(existing));
   const [savedAt, setSavedAt] = useState<Date | null>(null);
   const [marking, setMarking] = useState(false);
+  const [mobilePane, setMobilePane] = useState<'edit' | 'preview'>('edit');
   const skipFirstSave = useRef(true);
 
   // Debounced autosave: 500ms after the last edit, persist local state to DB.
@@ -102,15 +103,25 @@ export function InvoiceEditor({ existing }: { existing: Invoice }) {
     return () => clearTimeout(handle);
   }, [state, existing.id]);
 
-  // Cmd/Ctrl+Enter → Mark sent (per SPEC §6.2). Must live above the early return
+  // Keyboard shortcuts per SPEC §6.2. Must live above the early return
   // below so React's hooks order stays stable across renders.
-  // Uses a ref to avoid re-binding the listener every state change.
+  // Refs avoid re-binding the listener every state change.
   const handleMarkSentRef = useRef(() => Promise.resolve());
+  const handleDownloadPdfRef = useRef(() => Promise.resolve());
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+      if (!(e.metaKey || e.ctrlKey)) return;
+      // Cmd+Enter or Cmd+S → mark sent
+      if (e.key === 'Enter' || e.key.toLowerCase() === 's') {
         e.preventDefault();
         void handleMarkSentRef.current();
+        return;
+      }
+      // Cmd+D → download PDF
+      if (e.key.toLowerCase() === 'd') {
+        e.preventDefault();
+        void handleDownloadPdfRef.current();
+        return;
       }
     };
     window.addEventListener('keydown', onKey);
@@ -183,7 +194,22 @@ export function InvoiceEditor({ existing }: { existing: Invoice }) {
       setMarking(false);
     }
   };
+  // Intentional render-time ref assignment: keeps the keydown listener
+  // (bound once in a useEffect above) reading the latest handler closure
+  // without re-binding on every state change.
+  // eslint-disable-next-line react-hooks/refs
   handleMarkSentRef.current = handleMarkSent;
+
+  const handleDownloadPdf = async () => {
+    try {
+      await updateInvoice(existing.id, stateToPatch(state));
+      await downloadInvoicePdf(previewInvoice);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not download PDF');
+    }
+  };
+  // eslint-disable-next-line react-hooks/refs
+  handleDownloadPdfRef.current = handleDownloadPdf;
 
   return (
     <div className="flex flex-col h-screen">
@@ -206,33 +232,60 @@ export function InvoiceEditor({ existing }: { existing: Invoice }) {
             <SavedIndicator savedAt={savedAt} />
           </div>
           <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={async () => {
-                try {
-                  await updateInvoice(existing.id, stateToPatch(state));
-                  await downloadInvoicePdf(previewInvoice);
-                } catch (err) {
-                  toast.error(err instanceof Error ? err.message : 'Could not download PDF');
-                }
-              }}
-            >
+            <Button variant="outline" size="sm" onClick={handleDownloadPdf} title="Download PDF (⌘D)">
               <Download className="size-3.5" />
               Download PDF
+              <kbd className="ml-1 hidden md:inline text-[10px] text-muted-foreground font-mono">⌘D</kbd>
             </Button>
-            <Button size="sm" onClick={handleMarkSent} disabled={marking}>
+            <Button size="sm" onClick={handleMarkSent} disabled={marking} title="Mark sent (⌘S)">
               <Send className="size-3.5" />
               Mark sent
+              <kbd className="ml-1 hidden md:inline text-[10px] text-primary-foreground/70 font-mono">⌘S</kbd>
             </Button>
           </div>
         </div>
       </header>
 
+      {/* Mobile pane switcher — visible below lg, matches the split breakpoint */}
+      <div className="lg:hidden border-b border-border bg-background">
+        <div className="flex items-center gap-1 p-1 max-w-sm mx-auto">
+          <button
+            type="button"
+            onClick={() => setMobilePane('edit')}
+            className={cn(
+              'flex-1 text-sm py-1.5 rounded transition-colors',
+              mobilePane === 'edit'
+                ? 'bg-muted text-foreground font-medium'
+                : 'text-muted-foreground hover:text-foreground',
+            )}
+          >
+            Edit
+          </button>
+          <button
+            type="button"
+            onClick={() => setMobilePane('preview')}
+            className={cn(
+              'flex-1 text-sm py-1.5 rounded transition-colors',
+              mobilePane === 'preview'
+                ? 'bg-muted text-foreground font-medium'
+                : 'text-muted-foreground hover:text-foreground',
+            )}
+          >
+            Preview
+          </button>
+        </div>
+      </div>
+
       {/* split */}
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(420px,520px)_1fr] flex-1 min-h-0">
         {/* form */}
-        <div className="overflow-y-auto border-r border-border">
+        <div
+          className={cn(
+            'overflow-y-auto border-r border-border',
+            mobilePane === 'edit' ? 'block' : 'hidden',
+            'lg:block',
+          )}
+        >
           <div className="px-6 py-6 space-y-8 max-w-[520px]">
             <Section title="From">
               <div className="rounded-md border border-border bg-card px-4 py-3">
@@ -266,7 +319,7 @@ export function InvoiceEditor({ existing }: { existing: Invoice }) {
                   />
                 </Field>
                 <Field label="Currency">
-                  <Select value={state.currency} onValueChange={(v) => update({ currency: v })}>
+                  <Select value={state.currency} onValueChange={(v) => { if (v) update({ currency: v }); }}>
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
@@ -443,7 +496,13 @@ export function InvoiceEditor({ existing }: { existing: Invoice }) {
         </div>
 
         {/* preview */}
-        <div className="bg-muted/40 overflow-y-auto">
+        <div
+          className={cn(
+            'bg-muted/40 overflow-y-auto',
+            mobilePane === 'preview' ? 'block' : 'hidden',
+            'lg:block',
+          )}
+        >
           <div className="min-h-full flex items-start justify-center p-8">
             <div className="w-full max-w-[820px]">
               <div className="text-xs text-muted-foreground mb-3 flex items-center justify-between">

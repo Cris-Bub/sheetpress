@@ -151,7 +151,7 @@ export function CreateClientDialog({
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs font-normal text-muted-foreground">Default currency</Label>
-              <Select value={currency} onValueChange={setCurrency}>
+              <Select value={currency} onValueChange={(v) => setCurrency(v ?? 'USD')}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>

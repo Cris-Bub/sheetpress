@@ -40,16 +40,30 @@ export function ClientDetailView({ id }: { id: string }) {
     .sort((a, b) => b.issueDate.localeCompare(a.issueDate));
 
   const now = new Date();
-  const totalsByCurrency = new Map<string, { billed: number; outstanding: number; paid: number }>();
+  const currentYear = now.getFullYear();
+  const totalsByCurrency = new Map<
+    string,
+    { billed: number; outstanding: number; paid: number; paidThisYear: number }
+  >();
+  const invById = new Map(invoices.map((i) => [i.id, i]));
   for (const inv of invoices) {
+    if (inv.status === 'void') continue;
     const t = computeTotals(inv);
     const paid = paidAmountFor(inv.id, payments);
     const cur = inv.currency;
-    const entry = totalsByCurrency.get(cur) ?? { billed: 0, outstanding: 0, paid: 0 };
+    const entry = totalsByCurrency.get(cur) ?? { billed: 0, outstanding: 0, paid: 0, paidThisYear: 0 };
     entry.billed += t.total;
     entry.paid += paid;
-    if (inv.status !== 'paid' && inv.status !== 'void') entry.outstanding += Math.max(0, t.total - paid);
+    if (inv.status !== 'paid') entry.outstanding += Math.max(0, t.total - paid);
     totalsByCurrency.set(cur, entry);
+  }
+  for (const p of payments) {
+    const inv = invById.get(p.invoiceId);
+    if (!inv || inv.status === 'void') continue;
+    if (new Date(p.date).getFullYear() !== currentYear) continue;
+    const entry = totalsByCurrency.get(inv.currency) ?? { billed: 0, outstanding: 0, paid: 0, paidThisYear: 0 };
+    entry.paidThisYear += p.amount;
+    totalsByCurrency.set(inv.currency, entry);
   }
 
   return (
@@ -150,8 +164,14 @@ export function ClientDetailView({ id }: { id: string }) {
                       <span className="font-medium">{formatMoney(t.billed, cur)}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-muted-foreground">Paid</span>
-                      <span>{formatMoney(t.paid, cur)}</span>
+                      <span className="text-muted-foreground">Paid in {currentYear}</span>
+                      <span className={t.paidThisYear > 0 ? '' : 'text-muted-foreground'}>
+                        {formatMoney(t.paidThisYear, cur)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Paid (all time)</span>
+                      <span className="text-muted-foreground">{formatMoney(t.paid, cur)}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Outstanding</span>

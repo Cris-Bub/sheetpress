@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useTheme } from 'next-themes';
-import { Download, Upload, AlertTriangle } from 'lucide-react';
+import { Download, Upload, AlertTriangle, FileSpreadsheet, Plus, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { PageHeader } from '@/components/app/page-header';
 import { Button } from '@/components/ui/button';
@@ -19,37 +19,71 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useProfile, useSetting, isLoaded } from '@/lib/queries';
-import { updateProfile, wipeAllData } from '@/lib/mutations';
-import { exportEverything, importBackup } from '@/lib/backup';
+import { ConfirmDialog } from '@/components/app/confirm-dialog';
+import {
+  useProfile,
+  useProfiles,
+  useActiveProfileId,
+  useSetting,
+  isLoaded,
+  useInvoices,
+  usePayments,
+} from '@/lib/queries';
+import {
+  createProfile,
+  deleteProfile,
+  setActiveProfile,
+  updateProfile,
+  wipeAllData,
+} from '@/lib/mutations';
+import { exportEverything, exportTaxYear, importBackup } from '@/lib/backup';
+import { availableYears } from '@/lib/derive';
 import { formatDate } from '@/lib/format';
 import type { Profile, Address } from '@/lib/types';
 
-const REGIONS = [
-  { value: 'us', label: 'United States', taxIdLabel: 'EIN' },
-  { value: 'eu', label: 'European Union', taxIdLabel: 'VAT ID' },
-  { value: 'uk', label: 'United Kingdom', taxIdLabel: 'VAT Number' },
-  { value: 'ca', label: 'Canada', taxIdLabel: 'BN' },
-  { value: 'au', label: 'Australia', taxIdLabel: 'ABN' },
-  { value: 'other', label: 'Other', taxIdLabel: 'Tax ID' },
+type RegionPreset = {
+  value: string;
+  label: string;
+  taxIdLabel: string;
+  /** A reasonable default — the user can change it per invoice. */
+  defaultTaxRate: number;
+  defaultCurrency: string;
+};
+
+const REGIONS: RegionPreset[] = [
+  { value: 'us', label: 'United States', taxIdLabel: 'EIN', defaultTaxRate: 0, defaultCurrency: 'USD' },
+  { value: 'eu', label: 'European Union', taxIdLabel: 'VAT ID', defaultTaxRate: 21, defaultCurrency: 'EUR' },
+  { value: 'uk', label: 'United Kingdom', taxIdLabel: 'VAT Number', defaultTaxRate: 20, defaultCurrency: 'GBP' },
+  { value: 'ca', label: 'Canada', taxIdLabel: 'BN', defaultTaxRate: 5, defaultCurrency: 'CAD' },
+  { value: 'au', label: 'Australia', taxIdLabel: 'ABN', defaultTaxRate: 10, defaultCurrency: 'AUD' },
+  { value: 'other', label: 'Other', taxIdLabel: 'Tax ID', defaultTaxRate: 0, defaultCurrency: 'USD' },
 ];
 
 const ACCENT_COLORS = ['#1a1a1a', '#0b6e4f', '#7b3306', '#1e3a8a', '#7c2d12'];
 
 export default function SettingsPage() {
   const profile = useProfile();
+  const profiles = useProfiles();
+  const activeProfileId = useActiveProfileId();
   const lastBackupAt = useSetting<string>('lastBackupAt');
+  const invoices = useInvoices();
+  const payments = usePayments();
   const { resolvedTheme, setTheme } = useTheme();
   const [draft, setDraft] = useState<Profile | null>(null);
   const lastSavedRef = useRef<string>('');
   const [working, setWorking] = useState<string | null>(null);
   const [wipeOpen, setWipeOpen] = useState(false);
   const [wipeText, setWipeText] = useState('');
+  const [taxYear, setTaxYear] = useState<number>(new Date().getFullYear() - 1);
+  const [deleteProfileOpen, setDeleteProfileOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Mirror DB → local draft once.
+  // Mirror DB → local draft, including when the active profile changes.
+  // Controlled form mirroring external data is a recognized exception to the
+  // "no setState in effect" rule — see the React docs on syncing state to props.
   useEffect(() => {
-    if (profile && draft === null) {
+    if (profile && (draft === null || draft.id !== profile.id)) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setDraft(profile);
       lastSavedRef.current = JSON.stringify(profile);
     }
@@ -58,6 +92,8 @@ export default function SettingsPage() {
   // Debounced persistence on draft change.
   useEffect(() => {
     if (!draft || !profile) return;
+    // If the user just switched profiles, skip — the draft will be re-mirrored.
+    if (draft.id !== profile.id) return;
     const serialized = JSON.stringify(draft);
     if (serialized === lastSavedRef.current) return;
     const handle = setTimeout(() => {
@@ -73,9 +109,11 @@ export default function SettingsPage() {
         defaultPaymentTermsDays: draft.defaultPaymentTermsDays,
         defaultNotes: draft.defaultNotes,
         defaultCurrency: draft.defaultCurrency,
+        defaultTaxRate: draft.defaultTaxRate,
         accentColor: draft.accentColor,
         invoiceNumberFormat: draft.invoiceNumberFormat,
         nextInvoiceNumber: draft.nextInvoiceNumber,
+        logoDataUrl: draft.logoDataUrl,
       })
         .then(() => {
           lastSavedRef.current = serialized;
@@ -126,7 +164,84 @@ export default function SettingsPage() {
           </TabsList>
 
           <TabsContent value="profile" className="space-y-8">
+            {isLoaded(profiles) && profiles.length > 0 ? (
+              <Group title="Profile" description="Switch between businesses or add another (e.g. a DBA).">
+                <Row label="Active profile">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Select
+                      value={activeProfileId ?? profile?.id ?? ''}
+                      onValueChange={async (v) => {
+                        if (!v) return;
+                        try {
+                          await setActiveProfile(v);
+                        } catch (err) {
+                          toast.error(err instanceof Error ? err.message : 'Could not switch');
+                        }
+                      }}
+                    >
+                      <SelectTrigger className="w-64" aria-label="Active profile">
+                        <SelectValue>
+                          {(value) => {
+                            const v = String(value ?? '');
+                            const found = profiles.find((p) => p.id === v);
+                            return found?.businessName || 'Untitled';
+                          }}
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {profiles.map((p) => (
+                          <SelectItem key={p.id} value={p.id}>{p.businessName || 'Untitled'}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={async () => {
+                        try {
+                          const fresh = await createProfile({
+                            businessName: 'New profile',
+                            email: '',
+                            address: { line1: '', city: '', postalCode: '', country: 'US' },
+                            defaultPaymentTermsDays: profile?.defaultPaymentTermsDays ?? 14,
+                            defaultCurrency: profile?.defaultCurrency ?? 'USD',
+                            accentColor: profile?.accentColor ?? '#1a1a1a',
+                            invoiceNumberFormat: profile?.invoiceNumberFormat ?? '{YYYY}-{####}',
+                            nextInvoiceNumber: 1,
+                          });
+                          await setActiveProfile(fresh.id);
+                          toast.success('Added a new profile.');
+                        } catch (err) {
+                          toast.error(err instanceof Error ? err.message : 'Could not add');
+                        }
+                      }}
+                    >
+                      <Plus className="size-4" />
+                      Add profile
+                    </Button>
+                    {profiles.length > 1 ? (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-muted-foreground hover:text-destructive"
+                        onClick={() => setDeleteProfileOpen(true)}
+                      >
+                        <Trash2 className="size-3.5" />
+                        Delete
+                      </Button>
+                    ) : null}
+                  </div>
+                </Row>
+              </Group>
+            ) : null}
+
             <Group title="Identity" description="How you appear on every invoice.">
+              <Row label="Logo" hint="Shown on the invoice header. PNG, JPG, or SVG up to ~500 KB.">
+                <LogoField
+                  logoDataUrl={draft.logoDataUrl}
+                  onChange={(v) => setDraft({ ...draft, logoDataUrl: v })}
+                />
+              </Row>
               <Row label="Business name">
                 <Input
                   value={draft.businessName}
@@ -233,7 +348,9 @@ export default function SettingsPage() {
               <Row label="Default currency">
                 <Select
                   value={draft.defaultCurrency}
-                  onValueChange={(v) => setDraft({ ...draft, defaultCurrency: v })}
+                  onValueChange={(v) => {
+                    if (v) setDraft({ ...draft, defaultCurrency: v });
+                  }}
                 >
                   <SelectTrigger className="w-40">
                     <SelectValue />
@@ -244,6 +361,23 @@ export default function SettingsPage() {
                     ))}
                   </SelectContent>
                 </Select>
+              </Row>
+              <Row label="Default tax rate" hint="Percent. Applied to new invoices; you can override per-line or per-invoice.">
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="number"
+                    value={draft.defaultTaxRate ?? ''}
+                    onChange={(e) =>
+                      setDraft({
+                        ...draft,
+                        defaultTaxRate: e.target.value ? parseFloat(e.target.value) : undefined,
+                      })
+                    }
+                    placeholder="0"
+                    className="w-24 tabular-nums"
+                  />
+                  <span className="text-sm text-muted-foreground">%</span>
+                </div>
               </Row>
             </Group>
 
@@ -271,25 +405,9 @@ export default function SettingsPage() {
           <TabsContent value="region" className="space-y-8">
             <Group
               title="Region preset"
-              description="Sets the tax ID label on your invoices. Doesn't change your stored data."
+              description="Pick a region to apply sensible defaults: tax ID label, tax rate, and currency. You can change any of them afterward."
             >
-              <Row label="Tax ID label" hint="What this number is called on your invoices.">
-                <Select
-                  value={draft.taxIdLabel ?? 'Tax ID'}
-                  onValueChange={(v) => setDraft({ ...draft, taxIdLabel: v })}
-                >
-                  <SelectTrigger className="w-64">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {REGIONS.map((r) => (
-                      <SelectItem key={r.value} value={r.taxIdLabel}>
-                        {r.taxIdLabel} ({r.label})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </Row>
+              <RegionPicker draft={draft} setDraft={setDraft} />
             </Group>
           </TabsContent>
 
@@ -301,7 +419,7 @@ export default function SettingsPage() {
                   onCheckedChange={(v) => setTheme(v ? 'dark' : 'light')}
                 />
               </Row>
-              <Row label="Accent color" hint="Used on buttons and the invoice header line.">
+              <Row label="Accent color" hint="A small bar under the “Invoice” headline on every PDF and preview.">
                 <div className="flex items-center gap-2">
                   {ACCENT_COLORS.map((c) => (
                     <button
@@ -323,8 +441,52 @@ export default function SettingsPage() {
 
           <TabsContent value="data" className="space-y-8">
             <Group
+              title="Tax year export"
+              description="A spreadsheet-friendly ZIP scoped to one year — invoices.csv, payments.csv, and PDFs. Hand it to your accountant."
+            >
+              <div className="flex flex-wrap items-center gap-2">
+                <Select
+                  value={String(taxYear)}
+                  onValueChange={(v) => {
+                    if (v) setTaxYear(parseInt(v, 10));
+                  }}
+                >
+                  <SelectTrigger size="sm" className="w-32" aria-label="Tax year">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {isLoaded(invoices) && isLoaded(payments)
+                      ? availableYears(invoices, payments).map((y) => (
+                          <SelectItem key={y} value={String(y)}>{y}</SelectItem>
+                        ))
+                      : null}
+                  </SelectContent>
+                </Select>
+                <Button
+                  disabled={working === 'tax-export'}
+                  onClick={async () => {
+                    setWorking('tax-export');
+                    try {
+                      const r = await exportTaxYear(taxYear);
+                      toast.success(
+                        `Exported ${r.invoiceCount} invoices, ${r.paymentCount} payments, ${r.pdfCount} PDFs for ${taxYear}.`,
+                      );
+                    } catch (err) {
+                      toast.error(err instanceof Error ? err.message : 'Tax export failed');
+                    } finally {
+                      setWorking(null);
+                    }
+                  }}
+                >
+                  <FileSpreadsheet className="size-4" />
+                  {working === 'tax-export' ? 'Exporting…' : `Export ${taxYear} (.zip)`}
+                </Button>
+              </div>
+            </Group>
+
+            <Group
               title="Backup"
-              description="Your data lives in this browser. Export regularly to avoid losing it."
+              description="Your data lives in this browser. Export regularly to avoid losing it. The full backup now includes CSV files alongside the JSON."
             >
               <BackupStatus lastBackupAt={lastBackupAt} />
               <div className="flex gap-2 pt-2">
@@ -442,6 +604,24 @@ export default function SettingsPage() {
           </TabsContent>
         </Tabs>
       </div>
+      <ConfirmDialog
+        open={deleteProfileOpen}
+        onOpenChange={setDeleteProfileOpen}
+        title={profile ? `Delete profile "${profile.businessName}"?` : ''}
+        description="Profiles with existing invoices can't be deleted — the invoices reference them. This only removes a profile that's never been used."
+        confirmLabel="Delete profile"
+        destructive
+        onConfirm={async () => {
+          if (!profile) return;
+          try {
+            await deleteProfile(profile.id);
+            toast.success('Profile deleted.');
+            setDeleteProfileOpen(false);
+          } catch (err) {
+            toast.error(err instanceof Error ? err.message : 'Could not delete');
+          }
+        }}
+      />
     </>
   );
 }
@@ -451,7 +631,7 @@ function BackupStatus({ lastBackupAt }: { lastBackupAt: string | null | undefine
     return (
       <div className="flex items-center gap-2 rounded-md border border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/30 text-amber-900 dark:text-amber-200 px-3 py-2 text-sm">
         <AlertTriangle className="size-4 shrink-0" />
-        <span>You haven't backed up yet.</span>
+        <span>You haven&apos;t backed up yet.</span>
       </div>
     );
   }
@@ -511,6 +691,167 @@ function Row({
         {hint ? <p className="text-xs text-muted-foreground mt-0.5">{hint}</p> : null}
       </div>
       <div>{children}</div>
+    </div>
+  );
+}
+
+function RegionPicker({
+  draft,
+  setDraft,
+}: {
+  draft: Profile;
+  setDraft: (p: Profile) => void;
+}) {
+  const [picked, setPicked] = useState<string>('');
+  const [applyLabel, setApplyLabel] = useState(true);
+  const [applyRate, setApplyRate] = useState(true);
+  const [applyCurrency, setApplyCurrency] = useState(true);
+
+  const region = REGIONS.find((r) => r.value === picked);
+
+  const apply = () => {
+    if (!region) return;
+    const patch: Partial<Profile> = {};
+    if (applyLabel) patch.taxIdLabel = region.taxIdLabel;
+    if (applyRate) patch.defaultTaxRate = region.defaultTaxRate;
+    if (applyCurrency) patch.defaultCurrency = region.defaultCurrency;
+    setDraft({ ...draft, ...patch });
+    toast.success(`Applied ${region.label} preset.`);
+    setPicked('');
+  };
+
+  return (
+    <div className="space-y-4">
+      <Row label="Region">
+        <Select value={picked} onValueChange={(v) => setPicked(v ?? '')}>
+          <SelectTrigger className="w-64" aria-label="Region">
+            <SelectValue placeholder="Choose a region…" />
+          </SelectTrigger>
+          <SelectContent>
+            {REGIONS.map((r) => (
+              <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </Row>
+      {region ? (
+        <div className="rounded-md border border-border bg-muted/30 p-4 space-y-3 ml-0 sm:ml-[224px]">
+          <div className="text-xs uppercase tracking-wider text-muted-foreground">
+            Apply to your profile
+          </div>
+          <label className="flex items-center gap-2 text-sm cursor-pointer">
+            <input
+              type="checkbox"
+              checked={applyLabel}
+              onChange={(e) => setApplyLabel(e.target.checked)}
+              className="size-4"
+            />
+            <span>Tax ID label</span>
+            <span className="text-muted-foreground">→ {region.taxIdLabel}</span>
+          </label>
+          <label className="flex items-center gap-2 text-sm cursor-pointer">
+            <input
+              type="checkbox"
+              checked={applyRate}
+              onChange={(e) => setApplyRate(e.target.checked)}
+              className="size-4"
+            />
+            <span>Default tax rate</span>
+            <span className="text-muted-foreground">→ {region.defaultTaxRate}%</span>
+          </label>
+          <label className="flex items-center gap-2 text-sm cursor-pointer">
+            <input
+              type="checkbox"
+              checked={applyCurrency}
+              onChange={(e) => setApplyCurrency(e.target.checked)}
+              className="size-4"
+            />
+            <span>Default currency</span>
+            <span className="text-muted-foreground">→ {region.defaultCurrency}</span>
+          </label>
+          <div className="pt-1">
+            <Button
+              size="sm"
+              onClick={apply}
+              disabled={!applyLabel && !applyRate && !applyCurrency}
+            >
+              Apply preset
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <p className="text-sm text-muted-foreground ml-0 sm:ml-[224px]">
+          Current: <span className="text-foreground">{draft.taxIdLabel ?? 'Tax ID'}</span> ·{' '}
+          {draft.defaultTaxRate ?? 0}% · {draft.defaultCurrency}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function LogoField({
+  logoDataUrl,
+  onChange,
+}: {
+  logoDataUrl: string | undefined;
+  onChange: (v: string | undefined) => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const handleFile = (file: File) => {
+    if (file.size > 600_000) {
+      toast.error('Logo is too large (max ~500 KB).');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result;
+      if (typeof result === 'string') onChange(result);
+    };
+    reader.onerror = () => toast.error('Could not read file.');
+    reader.readAsDataURL(file);
+  };
+
+  return (
+    <div className="flex items-center gap-4">
+      {logoDataUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={logoDataUrl}
+          alt="Logo"
+          className="h-14 w-14 object-contain rounded-md border border-border bg-card"
+        />
+      ) : (
+        <div className="h-14 w-14 rounded-md border border-dashed border-border bg-card text-[10px] uppercase tracking-wider text-muted-foreground flex items-center justify-center">
+          No logo
+        </div>
+      )}
+      <div className="flex items-center gap-2">
+        <input
+          ref={inputRef}
+          type="file"
+          accept="image/png,image/jpeg,image/svg+xml"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            e.target.value = '';
+            if (file) handleFile(file);
+          }}
+        />
+        <Button variant="outline" size="sm" onClick={() => inputRef.current?.click()}>
+          {logoDataUrl ? 'Replace' : 'Upload logo'}
+        </Button>
+        {logoDataUrl ? (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-muted-foreground hover:text-destructive"
+            onClick={() => onChange(undefined)}
+          >
+            Remove
+          </Button>
+        ) : null}
+      </div>
     </div>
   );
 }

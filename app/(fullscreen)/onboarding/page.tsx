@@ -113,7 +113,7 @@ export default function Onboarding() {
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label className="text-sm font-normal text-muted-foreground">Region</Label>
-                <Select value={region} onValueChange={(v) => setRegion(v as Region)}>
+                <Select value={region} onValueChange={(v) => { if (v) setRegion(v as Region); }}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
@@ -129,7 +129,7 @@ export default function Onboarding() {
               </div>
               <div className="space-y-1.5">
                 <Label className="text-sm font-normal text-muted-foreground">Default currency</Label>
-                <Select value={currency} onValueChange={setCurrency}>
+                <Select value={currency} onValueChange={(v) => setCurrency(v ?? 'USD')}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>

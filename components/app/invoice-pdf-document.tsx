@@ -10,6 +10,7 @@ import {
 } from '@react-pdf/renderer';
 import type { Invoice } from '@/lib/types';
 import { computeTotals, formatDate, formatMoney, lineSubtotal } from '@/lib/format';
+import { isIntraCommunitySupply } from '@/lib/derive';
 
 // Use built-in PDF fonts. The on-screen preview uses Fraunces + Inter,
 // but react-pdf requires TTF/OTF and reliable CDN URLs for those don't exist.
@@ -45,11 +46,17 @@ const styles = StyleSheet.create({
     fontSize: 32,
     letterSpacing: -0.3,
   },
+  accentBar: {
+    height: 3,
+    width: 36,
+    marginTop: 6,
+    borderRadius: 1.5,
+  },
   number: {
     fontFamily: FONT_SANS,
     fontSize: 10,
     color: muted,
-    marginTop: 4,
+    marginTop: 6,
   },
   fromBlock: {
     alignItems: 'flex-end',
@@ -151,6 +158,15 @@ const styles = StyleSheet.create({
     color: muted,
   },
   footerCol: { flex: 1 },
+  intraCommunityNote: {
+    marginTop: 20,
+    paddingLeft: 10,
+    borderLeftWidth: 2,
+    borderLeftColor: hairline,
+    fontSize: 9,
+    color: muted,
+    fontStyle: 'italic',
+  },
 });
 
 function Address({
@@ -161,7 +177,7 @@ function Address({
   alignRight?: boolean;
 }) {
   if (!address) return null;
-  const style = alignRight ? { textAlign: 'right' as const } : undefined;
+  const style = alignRight ? { textAlign: 'right' as const } : {};
   return (
     <View style={{ marginTop: 4 }}>
       <Text style={[styles.smallMuted, style]}>{address.line1}</Text>
@@ -190,6 +206,9 @@ export function InvoicePdfDocument({ invoice }: { invoice: Invoice }) {
         <View style={styles.headerRow}>
           <View>
             <Text style={styles.title}>Invoice</Text>
+            <View
+              style={[styles.accentBar, { backgroundColor: p.accentColor || '#1a1a1a' }]}
+            />
             <Text style={styles.number}>{invoice.number}</Text>
           </View>
           <View style={styles.fromBlock}>
@@ -285,6 +304,15 @@ export function InvoicePdfDocument({ invoice }: { invoice: Invoice }) {
             </View>
           </View>
         </View>
+
+        {/* Intra-community supply reminder (EU↔EU B2B) */}
+        {isIntraCommunitySupply(invoice) ? (
+          <View style={styles.intraCommunityNote}>
+            <Text>
+              Intra-community supply — VAT reverse charge, Article 196 of Directive 2006/112/EC.
+            </Text>
+          </View>
+        ) : null}
 
         {/* Footer: payment + notes */}
         <View style={styles.footerRow}>

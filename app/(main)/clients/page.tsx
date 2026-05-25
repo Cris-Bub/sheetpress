@@ -2,36 +2,55 @@
 
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Search, Plus } from 'lucide-react';
 import { PageHeader } from '@/components/app/page-header';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { useClients, useInvoices, usePayments, isLoaded } from '@/lib/queries';
+import { useClients, useInvoices, usePayments, useProfile, isLoaded } from '@/lib/queries';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/app/empty-state';
+import { CreateClientDialog } from '@/components/app/create-client-dialog';
 import { computeTotals, formatMoney } from '@/lib/format';
 import { paidAmountFor } from '@/lib/derive';
 
 export default function ClientsPage() {
   const [q, setQ] = useState('');
+  const [createOpen, setCreateOpen] = useState(false);
+  const router = useRouter();
   const clients = useClients();
   const allInvoices = useInvoices();
   const payments = usePayments();
+  const profile = useProfile();
+  const currentYear = new Date().getFullYear();
 
   const enriched = useMemo(() => {
     if (!isLoaded(clients) || !isLoaded(allInvoices) || !isLoaded(payments)) return [];
     return clients.map((client) => {
       const invoices = allInvoices.filter((inv) => inv.clientId === client.id);
-      const totalsByCurrency = new Map<string, { billed: number; outstanding: number }>();
+      const totalsByCurrency = new Map<
+        string,
+        { billed: number; outstanding: number; paidThisYear: number }
+      >();
+      const invById = new Map(invoices.map((i) => [i.id, i]));
       for (const inv of invoices) {
+        if (inv.status === 'void') continue;
         const t = computeTotals(inv);
         const paid = paidAmountFor(inv.id, payments);
-        const out = inv.status === 'paid' || inv.status === 'void' ? 0 : Math.max(0, t.total - paid);
+        const out = inv.status === 'paid' ? 0 : Math.max(0, t.total - paid);
         const cur = inv.currency;
-        const entry = totalsByCurrency.get(cur) ?? { billed: 0, outstanding: 0 };
+        const entry = totalsByCurrency.get(cur) ?? { billed: 0, outstanding: 0, paidThisYear: 0 };
         entry.billed += t.total;
         entry.outstanding += out;
         totalsByCurrency.set(cur, entry);
+      }
+      for (const p of payments) {
+        const inv = invById.get(p.invoiceId);
+        if (!inv || inv.status === 'void') continue;
+        if (new Date(p.date).getFullYear() !== currentYear) continue;
+        const entry = totalsByCurrency.get(inv.currency) ?? { billed: 0, outstanding: 0, paidThisYear: 0 };
+        entry.paidThisYear += p.amount;
+        totalsByCurrency.set(inv.currency, entry);
       }
       return {
         client,
@@ -39,7 +58,7 @@ export default function ClientsPage() {
         totals: Array.from(totalsByCurrency.entries()).map(([currency, t]) => ({ currency, ...t })),
       };
     });
-  }, [clients, allInvoices, payments]);
+  }, [clients, allInvoices, payments, currentYear]);
 
   if (!isLoaded(clients) || !isLoaded(allInvoices) || !isLoaded(payments)) {
     return (
@@ -62,9 +81,19 @@ export default function ClientsPage() {
           <EmptyState
             title="No clients yet"
             description="Clients are added automatically as you bill them. You can also add one ahead of time from here."
-            action={<Button><Plus className="size-4" />Add a client</Button>}
+            action={
+              <Button onClick={() => setCreateOpen(true)}>
+                <Plus className="size-4" />Add a client
+              </Button>
+            }
           />
         </div>
+        <CreateClientDialog
+          open={createOpen}
+          onOpenChange={setCreateOpen}
+          defaultCurrency={profile?.defaultCurrency ?? 'USD'}
+          onCreated={(client) => router.push(`/clients/${client.id}`)}
+        />
       </>
     );
   }
@@ -82,7 +111,7 @@ export default function ClientsPage() {
   return (
     <>
       <PageHeader title="Clients" description={`${clients.length} clients`}>
-        <Button>
+        <Button onClick={() => setCreateOpen(true)}>
           <Plus className="size-4" />
           Add client
         </Button>
@@ -121,13 +150,28 @@ export default function ClientsPage() {
                 </div>
               </div>
               {totals.length > 0 ? (
-                <div className="mt-4 pt-4 border-t border-border flex items-end justify-between gap-3">
+                <div className="mt-4 pt-4 border-t border-border grid grid-cols-3 gap-3">
                   <div>
                     <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Billed</div>
                     <div className="space-y-0.5 mt-0.5 tabular-nums">
                       {totals.map((t) => (
                         <div key={t.currency} className="text-sm font-medium">
                           {formatMoney(t.billed, t.currency)}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                      Paid {currentYear}
+                    </div>
+                    <div className="space-y-0.5 mt-0.5 tabular-nums">
+                      {totals.map((t) => (
+                        <div
+                          key={t.currency}
+                          className={'text-sm ' + (t.paidThisYear > 0 ? '' : 'text-muted-foreground')}
+                        >
+                          {formatMoney(t.paidThisYear, t.currency)}
                         </div>
                       ))}
                     </div>
@@ -151,6 +195,12 @@ export default function ClientsPage() {
           ))}
         </div>
       </div>
+      <CreateClientDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        defaultCurrency={profile?.defaultCurrency ?? 'USD'}
+        onCreated={(client) => router.push(`/clients/${client.id}`)}
+      />
     </>
   );
 }
