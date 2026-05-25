@@ -4,9 +4,10 @@ import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { ArrowLeft, Download, Plus, Trash2, Send, ChevronDown, Check } from 'lucide-react';
+import { ArrowLeft, Download, Plus, Trash2, Send, Share2, ChevronDown, Check } from 'lucide-react';
 import { markInvoiceSent, updateInvoice } from '@/lib/mutations';
 import { downloadInvoicePdf } from '@/lib/pdf';
+import { sendInvoiceEmail } from '@/lib/email';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -108,6 +109,7 @@ export function InvoiceEditor({ existing }: { existing: Invoice }) {
   // Refs avoid re-binding the listener every state change.
   const handleMarkSentRef = useRef(() => Promise.resolve());
   const handleDownloadPdfRef = useRef(() => Promise.resolve());
+  const handleShareRef = useRef(() => Promise.resolve());
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!(e.metaKey || e.ctrlKey)) return;
@@ -121,6 +123,12 @@ export function InvoiceEditor({ existing }: { existing: Invoice }) {
       if (e.key.toLowerCase() === 'd') {
         e.preventDefault();
         void handleDownloadPdfRef.current();
+        return;
+      }
+      // Cmd+E → share invoice
+      if (e.key.toLowerCase() === 'e') {
+        e.preventDefault();
+        void handleShareRef.current();
         return;
       }
     };
@@ -211,6 +219,39 @@ export function InvoiceEditor({ existing }: { existing: Invoice }) {
   // eslint-disable-next-line react-hooks/refs
   handleDownloadPdfRef.current = handleDownloadPdf;
 
+  const handleShare = async () => {
+    if (!client?.email) {
+      toast.error('Add an email to this client first.');
+      return;
+    }
+    try {
+      // Flush pending edits so the rendered PDF matches what's on screen.
+      await updateInvoice(existing.id, stateToPatch(state));
+      const result = await sendInvoiceEmail(previewInvoice);
+      if (existing.status === 'draft') {
+        await markInvoiceSent(existing.id);
+        toast.success(
+          result.channel === 'web-share'
+            ? `Sharing invoice ${existing.number} — marked as sent.`
+            : `Mail client opening — invoice ${existing.number} marked as sent. PDF saved to Downloads.`,
+        );
+        router.replace(`/invoices/${existing.id}`);
+      } else {
+        toast.success(
+          result.channel === 'web-share'
+            ? 'Sharing invoice…'
+            : 'Mail client opening. PDF saved to Downloads.',
+        );
+      }
+    } catch (err) {
+      // User dismissed the share sheet — silent.
+      if (err instanceof DOMException && err.name === 'AbortError') return;
+      toast.error(err instanceof Error ? err.message : 'Could not share');
+    }
+  };
+  // eslint-disable-next-line react-hooks/refs
+  handleShareRef.current = handleShare;
+
   return (
     <div className="flex flex-col h-screen">
       {/* top bar */}
@@ -237,10 +278,24 @@ export function InvoiceEditor({ existing }: { existing: Invoice }) {
               Download PDF
               <kbd className="ml-1 hidden md:inline text-[10px] text-muted-foreground font-mono">⌘D</kbd>
             </Button>
-            <Button size="sm" onClick={handleMarkSent} disabled={marking} title="Mark sent (⌘S)">
+            <Button variant="outline" size="sm" onClick={handleMarkSent} disabled={marking} title="Mark sent (⌘S)">
               <Send className="size-3.5" />
               Mark sent
-              <kbd className="ml-1 hidden md:inline text-[10px] text-primary-foreground/70 font-mono">⌘S</kbd>
+              <kbd className="ml-1 hidden md:inline text-[10px] text-muted-foreground font-mono">⌘S</kbd>
+            </Button>
+            <Button
+              size="sm"
+              onClick={handleShare}
+              disabled={!client?.email}
+              title={
+                client?.email
+                  ? `Share invoice with ${client.email} (⌘E)`
+                  : 'Add an email to this client to enable'
+              }
+            >
+              <Share2 className="size-3.5" />
+              Share
+              <kbd className="ml-1 hidden md:inline text-[10px] text-primary-foreground/70 font-mono">⌘E</kbd>
             </Button>
           </div>
         </div>
@@ -398,7 +453,8 @@ export function InvoiceEditor({ existing }: { existing: Invoice }) {
                           type="number"
                           min="0"
                           step="0.01"
-                          value={toMajor(item.unitPrice, state.currency)}
+                          placeholder="0.00"
+                          value={item.unitPrice === 0 ? '' : toMajor(item.unitPrice, state.currency)}
                           onChange={(e) =>
                             updateLine(item.id, {
                               unitPrice: toMinor(parseFloat(e.target.value) || 0, state.currency),
@@ -498,16 +554,16 @@ export function InvoiceEditor({ existing }: { existing: Invoice }) {
         {/* preview */}
         <div
           className={cn(
-            'bg-muted/40 overflow-y-auto',
+            'bg-muted/40 overflow-y-auto overflow-x-auto',
             mobilePane === 'preview' ? 'block' : 'hidden',
             'lg:block',
           )}
         >
-          <div className="min-h-full flex items-start justify-center p-8">
+          <div className="min-h-full flex items-start justify-center p-4 sm:p-8 min-w-[640px]">
             <div className="w-full max-w-[820px]">
               <div className="text-xs text-muted-foreground mb-3 flex items-center justify-between">
                 <span>Preview · A4</span>
-                <span>What you see is what you’ll download</span>
+                <span className="hidden sm:inline">What you see is what you’ll download</span>
               </div>
               <InvoicePreview invoice={previewInvoice} />
             </div>

@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import { Inter, Fraunces } from 'next/font/google';
 import { Toaster } from '@/components/ui/sonner';
 import { DevHelper } from '@/components/app/dev-helper';
+import { ServiceWorkerRegister } from '@/components/app/service-worker-register';
 import { ThemeProvider } from '@/components/app/theme-provider';
 import './globals.css';
 
@@ -49,6 +50,7 @@ export default function RootLayout({
         <ThemeProvider>
           {children}
           <Toaster position="bottom-right" />
+          <ServiceWorkerRegister />
           {process.env.NODE_ENV === 'development' ? <DevHelper /> : null}
         </ThemeProvider>
       </body>

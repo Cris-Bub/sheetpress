@@ -40,6 +40,7 @@ lib/
   queries.ts                    React hooks (`useProfile`, `useInvoices`, `usePaymentsForInvoice`, …)
   mutations.ts                  Async ops (`createInvoiceDraft`, `recordPayment`, `markInvoiceSent`, …)
   pdf.ts                        renderInvoiceToBlob + downloadInvoicePdf
+  email.ts                      composeInvoiceEmail + sendInvoiceEmail (Web Share API → mailto: fallback)
   backup.ts                     exportEverything + importBackup (ZIP with Zod-validated JSON + PDFs)
   sample-data.ts                Dev-only seed (used by DevHelper, NOT imported from any screen)
   utils.ts                      `cn()` from shadcn
@@ -143,22 +144,22 @@ These docs are how future contributors (and future agents) avoid re-deriving the
 - Autosave, status mutations, payments, PDF download, backup ZIP round-trip, dark mode, dev helper.
 - **Tax-season package:** dashboard year selector, tax-collected sub-line on the Paid tile, per-client "Paid in {year}" on cards + detail, CSV exports inside the full backup, `exportTaxYear()` mutation + Settings UI.
 - **Settings completeness:** logo upload (FileReader → `profile.logoDataUrl`), default tax rate field, region preset that fills label + rate + currency via checkboxes.
-- **Editor keyboard shortcuts:** Cmd+Enter or Cmd+S → mark sent; Cmd+D → download PDF. Inline `<kbd>` hints on buttons (desktop only).
+- **Editor keyboard shortcuts:** Cmd+Enter or Cmd+S → mark sent; Cmd+D → download PDF; Cmd+E → share invoice. Inline `<kbd>` hints on buttons (desktop only).
+- **Share invoice (lightweight, no backend):** `lib/email.ts/sendInvoiceEmail` tries `navigator.share({ files: [pdf] })` for Web-Share-with-files (Mac/iOS Safari hands the PDF to the OS share sheet — Mail, Messages, AirDrop, etc., pre-attached); falls back to `mailto:` with pre-filled subject/body + a PDF auto-download for manual attach. Primary "Share" button (lucide `Share2` icon) in the editor toolbar and on invoice detail. Auto-marks status `draft → sent` only when the share/mailto actually opens (Web Share `AbortError` is treated as a real cancel — status stays unchanged). No OAuth, no transactional MTA, the message leaves from the user's own apps. Internal naming keeps `email.ts` / `sendInvoiceEmail` / `composeInvoiceEmail` since those describe the *content* (subject + body + signature); "Share" describes the *delivery channel*. See SPEC.md §6.3.1.
 - **Mobile pass:** sidebar collapses to a slide-in drawer with a hamburger top bar below `md`; editor split collapses to an Edit/Preview tab switcher below `lg`. Layout's flex direction flips to `flex-col` below `md` so the top bar stacks above main.
-- **PWA installable:** `app/icon.tsx`, `app/apple-icon.tsx`, `app/manifest.ts`. Theme-color metadata via the root `viewport` export. No service worker.
+- **PWA installable + offline-capable:** `app/icon.tsx`, `app/apple-icon.tsx`, `app/manifest.ts`, plus a hand-rolled service worker at `public/sw.js` registered by `components/app/service-worker-register.tsx` (mounted in `app/layout.tsx`). Strategy: cache-first for `/_next/static/*` (hashed → safe forever), network-first with cached-shell fallback for HTML navigations, stale-while-revalidate for everything else. Bump `VERSION` in `public/sw.js` to invalidate caches; old caches are pruned on activate. Registration is gated to `NODE_ENV === 'production'` because Turbopack rewrites dev chunk URLs on every refresh. `next.config.ts` sends `no-cache` headers on `/sw.js` so SW updates always ship.
 - **EU intra-community supply note:** `lib/derive.ts/isIntraCommunitySupply(invoice)` returns true for EU↔EU B2B with a seller VAT ID; preview and PDF render the reverse-charge note when it does.
 - **Multi-profile:** `useProfiles()`, `useActiveProfileId()`, `setActiveProfile()`, `deleteProfile()`. Active profile is stored under settings key `activeProfileId` and falls back to "first profile" when unset. Settings → Profile has an Active profile picker + Add/Delete actions. `createInvoiceDraft()` uses the active profile.
 
 **Not yet built (worth doing, low risk):**
 - **Form validation in onboarding** — currently just checks non-empty + email regex; should use Zod via `@hookform/resolvers/zod` consistently.
 - **Cmd+K command palette** per SPEC §6.2.
-- **Service worker** for true offline-first PWA (currently only manifest + icons).
 - **"From" picker in the editor** when more than one profile exists. Currently the editor's preview pulls from the live `useProfile()` (active profile), not the invoice's saved `profileSnapshot`. Fine for single-profile users; for multi-profile, the editor should let you switch the source profile of a draft.
 
 **Known limitations (intentional, see DESIGN.md / SPEC.md for the reasoning):**
 - PDF uses built-in fonts, not Fraunces.
 - No exchange-rate conversion; multi-currency totals stay separate.
-- No CRM / time tracking / email sending / payment processing — these are deliberately not features.
+- No CRM / time tracking / payment processing — these are deliberately not features. (Email sending is supported via the lightweight Web Share + `mailto:` handoff; full Gmail/Outlook OAuth-into-inbox sending stays out — see SPEC.md §9.)
 - Drafts that get deleted leave numeric gaps. Permanent numbering is a uniform rule, not a bug.
 
 ## Repo hygiene

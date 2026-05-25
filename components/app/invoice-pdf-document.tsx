@@ -314,20 +314,20 @@ export function InvoicePdfDocument({ invoice }: { invoice: Invoice }) {
           </View>
         ) : null}
 
-        {/* Footer: payment + notes */}
+        {/* Footer: notes + payment */}
         <View style={styles.footerRow}>
-          {invoice.paymentInstructions ? (
-            <View style={styles.footerCol}>
-              <Text style={styles.sectionLabel}>Payment</Text>
-              <Text>{invoice.paymentInstructions}</Text>
-            </View>
-          ) : (
-            <View style={styles.footerCol} />
-          )}
           {invoice.notes ? (
             <View style={styles.footerCol}>
               <Text style={styles.sectionLabel}>Notes</Text>
               <Text>{invoice.notes}</Text>
+            </View>
+          ) : (
+            <View style={styles.footerCol} />
+          )}
+          {invoice.paymentInstructions ? (
+            <View style={styles.footerCol}>
+              <Text style={styles.sectionLabel}>Payment</Text>
+              <Text>{invoice.paymentInstructions}</Text>
             </View>
           ) : null}
         </View>

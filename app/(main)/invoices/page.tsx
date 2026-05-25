@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
-import { Search, MoreHorizontal, Download, Copy, Eye, CheckCircle2, Ban } from 'lucide-react';
+import { Search, MoreHorizontal, Download, Copy, Eye, CheckCircle2, Ban, ChevronUp, ChevronDown } from 'lucide-react';
 import { PageHeader } from '@/components/app/page-header';
 import { StatusBadge } from '@/components/app/status-badge';
 import { Button } from '@/components/ui/button';
@@ -38,9 +38,24 @@ const FILTERS: { value: 'all' | InvoiceStatus; label: string }[] = [
   { value: 'paid', label: 'Paid' },
 ];
 
+type SortKey = 'issued' | 'due' | 'status' | 'amount';
+type SortDir = 'asc' | 'desc';
+
+// Urgency ranking — higher = more actionable. Used so "desc" sort surfaces
+// overdue first by default, which matches what users typically want.
+const STATUS_URGENCY: Record<InvoiceStatus, number> = {
+  overdue: 5,
+  partial: 4,
+  sent: 3,
+  draft: 2,
+  paid: 1,
+  void: 0,
+};
+
 export default function InvoicesPage() {
   const [filter, setFilter] = useState<'all' | InvoiceStatus>('all');
   const [q, setQ] = useState('');
+  const [sort, setSort] = useState<{ by: SortKey; dir: SortDir }>({ by: 'issued', dir: 'desc' });
   const [voidingInv, setVoidingInv] = useState<Invoice | null>(null);
   const [voidWorking, setVoidWorking] = useState(false);
   const [payingInv, setPayingInv] = useState<Invoice | null>(null);
@@ -84,7 +99,11 @@ export default function InvoicesPage() {
   const filtered = useMemo(() => {
     if (!isLoaded(invoices) || !isLoaded(payments)) return [];
     return [...invoices]
-      .map((inv) => ({ inv, status: effectiveStatus(inv, payments, now) }))
+      .map((inv) => ({
+        inv,
+        status: effectiveStatus(inv, payments, now),
+        total: computeTotals(inv).total,
+      }))
       .filter(({ inv, status }) => {
         if (filter !== 'all' && status !== filter) return false;
         if (q.trim()) {
@@ -96,8 +115,35 @@ export default function InvoicesPage() {
         }
         return true;
       })
-      .sort((a, b) => b.inv.issueDate.localeCompare(a.inv.issueDate));
-  }, [filter, q, invoices, payments]);
+      .sort((a, b) => {
+        let v = 0;
+        switch (sort.by) {
+          case 'issued':
+            v = a.inv.issueDate.localeCompare(b.inv.issueDate);
+            break;
+          case 'due':
+            v = a.inv.dueDate.localeCompare(b.inv.dueDate);
+            break;
+          case 'status':
+            v = STATUS_URGENCY[a.status] - STATUS_URGENCY[b.status];
+            break;
+          case 'amount':
+            v = a.total - b.total;
+            break;
+        }
+        // Stable tiebreaker: newest issued first, then by number — keeps order
+        // deterministic when two rows tie on the chosen column.
+        if (v === 0) v = a.inv.issueDate.localeCompare(b.inv.issueDate);
+        if (v === 0) v = a.inv.number.localeCompare(b.inv.number);
+        return sort.dir === 'desc' ? -v : v;
+      });
+  }, [filter, q, sort, invoices, payments]);
+
+  const toggleSort = (by: SortKey) => {
+    setSort((prev) =>
+      prev.by === by ? { by, dir: prev.dir === 'desc' ? 'asc' : 'desc' } : { by, dir: 'desc' },
+    );
+  };
 
   if (!isLoaded(invoices) || !isLoaded(payments)) {
     return (
@@ -175,16 +221,15 @@ export default function InvoicesPage() {
                 <tr>
                   <th className="text-left font-medium px-5 py-2.5 w-24">Number</th>
                   <th className="text-left font-medium px-5 py-2.5">Client</th>
-                  <th className="text-left font-medium px-5 py-2.5 w-32">Issued</th>
-                  <th className="text-left font-medium px-5 py-2.5 w-32">Due</th>
-                  <th className="text-left font-medium px-5 py-2.5 w-28">Status</th>
-                  <th className="text-right font-medium px-5 py-2.5 w-36">Amount</th>
+                  <SortableTh label="Issued" sortKey="issued" sort={sort} onToggle={toggleSort} className="w-32" />
+                  <SortableTh label="Due" sortKey="due" sort={sort} onToggle={toggleSort} className="w-32" />
+                  <SortableTh label="Status" sortKey="status" sort={sort} onToggle={toggleSort} className="w-28" />
+                  <SortableTh label="Amount" sortKey="amount" sort={sort} onToggle={toggleSort} align="right" className="w-36" />
                   <th className="w-10" />
                 </tr>
               </thead>
               <tbody>
-                {filtered.map(({ inv, status }) => {
-                  const total = computeTotals(inv).total;
+                {filtered.map(({ inv, status, total }) => {
                   const paid = paidAmountFor(inv.id, payments);
                   const ratio = paymentRatio(inv, payments);
                   const overdueDays = status === 'overdue' ? daysOverdue(inv, now) : 0;
@@ -291,5 +336,41 @@ export default function InvoicesPage() {
         />
       ) : null}
     </>
+  );
+}
+
+function SortableTh({
+  label,
+  sortKey,
+  sort,
+  onToggle,
+  align = 'left',
+  className,
+}: {
+  label: string;
+  sortKey: SortKey;
+  sort: { by: SortKey; dir: SortDir };
+  onToggle: (by: SortKey) => void;
+  align?: 'left' | 'right';
+  className?: string;
+}) {
+  const active = sort.by === sortKey;
+  const Icon = active && sort.dir === 'asc' ? ChevronUp : ChevronDown;
+  return (
+    <th className={cn('font-medium px-5 py-2.5', align === 'right' ? 'text-right' : 'text-left', className)}>
+      <button
+        type="button"
+        onClick={() => onToggle(sortKey)}
+        aria-sort={active ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}
+        className={cn(
+          'inline-flex items-center gap-1 uppercase tracking-wider text-xs transition-colors hover:text-foreground',
+          align === 'right' && 'flex-row-reverse',
+          active ? 'text-foreground' : 'text-muted-foreground',
+        )}
+      >
+        {label}
+        <Icon className={cn('size-3 transition-opacity', active ? 'opacity-100' : 'opacity-30')} />
+      </button>
+    </th>
   );
 }

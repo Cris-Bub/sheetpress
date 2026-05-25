@@ -11,8 +11,19 @@ import { useClients, useInvoices, usePayments, useProfile, isLoaded } from '@/li
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/app/empty-state';
 import { CreateClientDialog } from '@/components/app/create-client-dialog';
+import { ProportionBar, type Segment } from '@/components/app/proportion-bar';
+import type { InvoiceStatus } from '@/lib/types';
 import { computeTotals, formatMoney } from '@/lib/format';
-import { paidAmountFor } from '@/lib/derive';
+import { effectiveStatus, paidAmountFor } from '@/lib/derive';
+
+const STATUS_LABEL: Record<InvoiceStatus, string> = {
+  paid: 'Paid',
+  partial: 'Partial',
+  sent: 'Sent',
+  overdue: 'Overdue',
+  draft: 'Draft',
+  void: 'Void',
+};
 
 export default function ClientsPage() {
   const [q, setQ] = useState('');
@@ -32,6 +43,9 @@ export default function ClientsPage() {
         string,
         { billed: number; outstanding: number; paidThisYear: number }
       >();
+      const statusTotals: Record<InvoiceStatus, number> = {
+        draft: 0, sent: 0, partial: 0, overdue: 0, paid: 0, void: 0,
+      };
       const invById = new Map(invoices.map((i) => [i.id, i]));
       for (const inv of invoices) {
         if (inv.status === 'void') continue;
@@ -43,6 +57,8 @@ export default function ClientsPage() {
         entry.billed += t.total;
         entry.outstanding += out;
         totalsByCurrency.set(cur, entry);
+        const eff = effectiveStatus(inv, payments);
+        if (eff !== 'void') statusTotals[eff] += t.total;
       }
       for (const p of payments) {
         const inv = invById.get(p.invoiceId);
@@ -52,10 +68,14 @@ export default function ClientsPage() {
         entry.paidThisYear += p.amount;
         totalsByCurrency.set(inv.currency, entry);
       }
+      const segments: Segment[] = (['overdue', 'partial', 'sent', 'paid', 'draft'] as InvoiceStatus[])
+        .filter((s) => statusTotals[s] > 0)
+        .map((s) => ({ key: s, label: STATUS_LABEL[s], value: statusTotals[s] }));
       return {
         client,
         invoiceCount: invoices.length,
         totals: Array.from(totalsByCurrency.entries()).map(([currency, t]) => ({ currency, ...t })),
+        segments,
       };
     });
   }, [clients, allInvoices, payments, currentYear]);
@@ -129,7 +149,7 @@ export default function ClientsPage() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-5xl">
-          {filtered.map(({ client, invoiceCount, totals }) => (
+          {filtered.map(({ client, invoiceCount, totals, segments }) => (
             <Link
               key={client.id}
               href={`/clients/${client.id}`}
@@ -190,6 +210,9 @@ export default function ClientsPage() {
                     </div>
                   </div>
                 </div>
+              ) : null}
+              {segments.length > 0 ? (
+                <ProportionBar segments={segments} height={3} className="mt-4 opacity-80" />
               ) : null}
             </Link>
           ))}

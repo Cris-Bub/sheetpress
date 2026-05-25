@@ -144,6 +144,14 @@ export function InvoicePreview({ invoice, className }: { invoice: Invoice; class
 
       {/* Notes + payment instructions */}
       <div className="mt-auto pt-10 grid grid-cols-2 gap-8 text-[9.5pt] text-zinc-600">
+        {invoice.notes ? (
+          <div>
+            <div className="text-[9pt] uppercase tracking-widest text-zinc-400 mb-2">Notes</div>
+            <div className="whitespace-pre-line leading-relaxed">{invoice.notes}</div>
+          </div>
+        ) : (
+          <div />
+        )}
         {invoice.paymentInstructions ? (
           <div>
             <div className="text-[9pt] uppercase tracking-widest text-zinc-400 mb-2">
@@ -152,14 +160,6 @@ export function InvoicePreview({ invoice, className }: { invoice: Invoice; class
             <div className="whitespace-pre-line leading-relaxed">
               {invoice.paymentInstructions}
             </div>
-          </div>
-        ) : (
-          <div />
-        )}
-        {invoice.notes ? (
-          <div>
-            <div className="text-[9pt] uppercase tracking-widest text-zinc-400 mb-2">Notes</div>
-            <div className="whitespace-pre-line leading-relaxed">{invoice.notes}</div>
           </div>
         ) : null}
       </div>

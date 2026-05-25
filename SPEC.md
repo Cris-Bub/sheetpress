@@ -222,9 +222,17 @@ type Address = {
 - Single button: "Download PDF". Generates client-side via react-pdf. File saved as `{businessName}-{invoiceNumber}.pdf`.
 - (v2) "Copy as PDF" — copies the Blob to clipboard for paste-into-email apps that support it.
 
+### 6.3.1 Share invoice
+- "Share" button on the editor (primary action, ⌘E) and on the invoice detail view. Disabled until the client has an email on file.
+- On Mac/iOS Safari and other browsers with the Web Share API + file support, hands the PDF + pre-filled subject/body/recipient to the native share sheet — Mail, Messages, AirDrop, and any other share extension the user has installed. Apple Mail receives the file pre-attached.
+- Everywhere else (desktop Chrome/Firefox/Edge, Windows, Linux): opens `mailto:` with subject + body pre-filled, and triggers a PDF download so the user drags it into the compose window.
+- Auto-marks the invoice as `sent` the moment the share sheet / mailto link opens, only when the invoice was previously `draft`. If the user dismisses the Web Share sheet (`AbortError`), the status stays unchanged.
+- No backend, no OAuth, no transactional mail provider. The message leaves from the user's own apps, so deliverability is whatever their mailbox already gets.
+
 ### 6.4 Invoice list / history
 - Default view: table sorted by issue date desc.
 - Columns: Number, Client, Issue Date, Due Date, Total, Status.
+- Issued, Due, Status, and Amount column headers are clickable to sort; clicking again flips direction. Status sorts by urgency (overdue → partial → sent → draft → paid → void). Sort is session-only — defaults restore on reload.
 - Status filter chips: All / Draft / Sent / Paid / Partial / Overdue.
 - Client filter, date range, search (number + client name + line item text).
 - Row actions: View, Edit (drafts only), Duplicate, Download PDF, Mark Paid, Void.
@@ -311,7 +319,7 @@ Saying no explicitly so the principles hold:
 - **Recurring invoices.** v2.
 - **Quotes / estimates.** v2 — relatively cheap addition since the data model is mostly the same.
 - **Multi-user / teams.** This is a tool for one person. Not a SaaS.
-- **Email sending.** v1 generates a PDF — *you* email it. (Removes auth, removes deliverability headaches, removes server need.) v2: "Open in mail client with PDF attached" via `mailto:`.
+- **Inbox-OAuth email sending (Gmail/Outlook).** We ship the lightweight handoff in §6.3.1 (Web Share API + `mailto:`) which keeps the app backend-free. Full OAuth-into-the-user's-inbox sending stays out of scope to avoid Google's Restricted Scope verification, token storage, and a hosted backend.
 - **Expense tracking.**
 - **Reports beyond the dashboard.** Export to CSV/JSON for anything else.
 - **AI features.** Not until there's a concrete problem one solves better than a form.

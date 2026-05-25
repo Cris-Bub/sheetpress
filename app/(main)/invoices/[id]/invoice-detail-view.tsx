@@ -13,6 +13,7 @@ import {
   Ban,
   Plus,
   Trash2,
+  Share2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -23,11 +24,13 @@ import { ConfirmDialog } from '@/components/app/confirm-dialog';
 import { useInvoice, usePaymentsForInvoice, isLoaded } from '@/lib/queries';
 import {
   duplicateInvoice,
+  markInvoiceSent,
   voidInvoice,
   deletePayment,
   deleteInvoiceDraft,
 } from '@/lib/mutations';
 import { downloadInvoicePdf } from '@/lib/pdf';
+import { sendInvoiceEmail } from '@/lib/email';
 import { effectiveStatus, paidAmountFor } from '@/lib/derive';
 import { computeTotals, formatDate, formatMoney } from '@/lib/format';
 
@@ -104,31 +107,74 @@ export function InvoiceDetailView({ id }: { id: string }) {
     }
   };
 
+  const handleShare = async () => {
+    const recipient = invoice.clientSnapshot?.email;
+    if (!recipient) {
+      toast.error('Add an email to this client first.');
+      return;
+    }
+    try {
+      const result = await sendInvoiceEmail(invoice);
+      if (invoice.status === 'draft') {
+        await markInvoiceSent(invoice.id);
+        toast.success(
+          result.channel === 'web-share'
+            ? `Sharing invoice ${invoice.number} — marked as sent.`
+            : `Mail client opening — invoice ${invoice.number} marked as sent. PDF saved to Downloads.`,
+        );
+      } else {
+        toast.success(
+          result.channel === 'web-share'
+            ? 'Sharing invoice…'
+            : 'Mail client opening. PDF saved to Downloads.',
+        );
+      }
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') return;
+      toast.error(err instanceof Error ? err.message : 'Could not share');
+    }
+  };
+
   return (
     <div className="flex flex-col min-h-screen">
       <div className="sticky top-0 z-10 bg-background/80 backdrop-blur border-b border-border">
-        <div className="flex items-center justify-between gap-4 px-8 h-14">
-          <div className="flex items-center gap-3 min-w-0">
-            <Button render={<Link href="/invoices" />} variant="ghost" size="icon" className="size-8 -ml-2">
+        <div className="flex items-center justify-between gap-2 sm:gap-4 px-4 sm:px-8 h-14">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            <Button render={<Link href="/invoices" />} variant="ghost" size="icon" className="size-8 -ml-2 shrink-0">
               <ArrowLeft className="size-4" />
             </Button>
-            <div className="font-mono text-xs text-muted-foreground">{invoice.number}</div>
-            <div className="text-sm font-medium truncate">{invoice.clientSnapshot?.name || '—'}</div>
-            <StatusBadge status={status} />
+            <div className="font-mono text-xs text-muted-foreground whitespace-nowrap shrink-0">{invoice.number}</div>
+            <div className="text-sm font-medium truncate hidden min-[420px]:block">{invoice.clientSnapshot?.name || '—'}</div>
+            <div className="shrink-0">
+              <StatusBadge status={status} />
+            </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2">
             {status === 'draft' ? (
-              <Button render={<Link href={`/invoices/${invoice.id}/edit`} />} variant="outline" size="sm">
+              <Button
+                render={<Link href={`/invoices/${invoice.id}/edit`} />}
+                variant="outline"
+                size="sm"
+                title="Edit"
+              >
                 <Pencil className="size-3.5" />
-                Edit
+                <span className="hidden lg:inline">Edit</span>
               </Button>
             ) : null}
-            <Button variant="outline" size="sm" onClick={handleDuplicate} disabled={working}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleDuplicate}
+              disabled={working}
+              title="Duplicate"
+            >
               <Copy className="size-3.5" />
-              Duplicate
+              <span className="hidden lg:inline">Duplicate</span>
             </Button>
             <Button
+              variant="outline"
               size="sm"
+              title="Download PDF"
               onClick={async () => {
                 try {
                   await downloadInvoicePdf(invoice);
@@ -138,15 +184,30 @@ export function InvoiceDetailView({ id }: { id: string }) {
               }}
             >
               <Download className="size-3.5" />
-              Download PDF
+              <span className="hidden lg:inline">Download PDF</span>
+            </Button>
+            <Button
+              size="sm"
+              onClick={handleShare}
+              disabled={!invoice.clientSnapshot?.email}
+              title={
+                invoice.clientSnapshot?.email
+                  ? `Share invoice with ${invoice.clientSnapshot.email}`
+                  : 'Add an email to this client to enable'
+              }
+            >
+              <Share2 className="size-3.5" />
+              <span className="hidden lg:inline">Share</span>
             </Button>
           </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-8 px-8 py-8 max-w-[1400px] mx-auto w-full">
-        <div className="flex justify-center">
-          <InvoicePreview invoice={invoice} />
+      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_320px] gap-8 px-4 sm:px-8 py-4 sm:py-8 max-w-[1400px] mx-auto w-full">
+        <div className="-mx-4 sm:mx-0 overflow-x-auto">
+          <div className="min-w-[640px] flex justify-center px-4 sm:px-0">
+            <InvoicePreview invoice={invoice} />
+          </div>
         </div>
 
         <aside className="space-y-6 text-sm">
