@@ -79,6 +79,7 @@ const InvoiceSchema = z.object({
     .optional(),
   notes: z.string().optional(),
   paymentInstructions: z.string().optional(),
+  stripePaymentLink: z.string().optional(),
   status: z.enum(['draft', 'sent', 'paid', 'partial', 'overdue', 'void']),
   createdAt: z.string(),
   updatedAt: z.string(),

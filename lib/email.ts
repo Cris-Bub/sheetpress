@@ -22,16 +22,22 @@ export function composeInvoiceEmail(invoice: Invoice): ComposedEmail {
   const dueDate = formatDate(invoice.dueDate);
 
   const subject = `Invoice ${invoice.number} from ${profile.businessName}`;
-  const body = [
+  const lines = [
     `Hi ${greetingName},`,
     '',
     `Please find invoice ${invoice.number} for ${total} attached. Payment is due ${dueDate}.`,
+  ];
+  if (invoice.stripePaymentLink) {
+    lines.push('', `Pay online: ${invoice.stripePaymentLink}`);
+  }
+  lines.push(
     '',
     `Let me know if you have any questions.`,
     '',
     `Thanks,`,
     profile.businessName,
-  ].join('\n');
+  );
+  const body = lines.join('\n');
 
   return { to: client.email ?? '', subject, body };
 }
@@ -66,7 +72,7 @@ export async function sendInvoiceEmail(invoice: Invoice): Promise<SendResult> {
       await navigator.share({
         files: [file],
         title: subject,
-        text: `${body}\n\nTo: ${to}`,
+        text: to ? `${body}\n\nTo: ${to}` : body,
       });
       return { channel: 'web-share' };
     } catch (err) {

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import {
   Dialog,
@@ -20,15 +20,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { createClient } from '@/lib/mutations';
+import { createClient, updateClient } from '@/lib/mutations';
+import { db } from '@/lib/db';
 import type { Client } from '@/lib/types';
 
 const CURRENCIES = ['USD', 'EUR', 'GBP', 'CAD', 'AUD', 'CHF', 'SEK', 'DKK', 'NOK', 'JPY'];
 
-/**
- * Lightweight create-client dialog. Captures only the fields most needed to
- * issue an invoice — everything else can be filled in later from the Clients page.
- */
 type AddressDraft = {
   line1: string;
   line2: string;
@@ -46,26 +43,63 @@ function addressHasContent(a: AddressDraft): boolean {
   return Boolean(a.line1.trim() || a.city.trim() || a.postalCode.trim() || a.country.trim());
 }
 
-export function CreateClientDialog({
+function addressFromClient(c: Client): AddressDraft {
+  const a = c.address;
+  if (!a) return EMPTY_ADDRESS;
+  return {
+    line1: a.line1 ?? '',
+    line2: a.line2 ?? '',
+    city: a.city ?? '',
+    region: a.region ?? '',
+    postalCode: a.postalCode ?? '',
+    country: a.country ?? '',
+  };
+}
+
+/**
+ * Create-or-edit client dialog. Pass `existing` to edit an existing record;
+ * omit it to create a new one. Used both from the invoice editor's picker
+ * (inline add/edit) and from the Clients detail page.
+ */
+export function ClientFormDialog({
   open,
   onOpenChange,
   defaultCurrency,
-  onCreated,
+  existing,
+  onSaved,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   defaultCurrency: string;
-  onCreated: (client: Client) => void;
+  existing?: Client;
+  onSaved?: (client: Client) => void;
 }) {
-  const [name, setName] = useState('');
-  const [contactName, setContactName] = useState('');
-  const [email, setEmail] = useState('');
-  const [taxId, setTaxId] = useState('');
-  const [currency, setCurrency] = useState(defaultCurrency);
-  const [address, setAddress] = useState<AddressDraft>(EMPTY_ADDRESS);
+  const editing = Boolean(existing);
+  const [name, setName] = useState(existing?.name ?? '');
+  const [contactName, setContactName] = useState(existing?.contactName ?? '');
+  const [email, setEmail] = useState(existing?.email ?? '');
+  const [taxId, setTaxId] = useState(existing?.taxId ?? '');
+  const [currency, setCurrency] = useState(existing?.defaultCurrency ?? defaultCurrency);
+  const [address, setAddress] = useState<AddressDraft>(
+    existing ? addressFromClient(existing) : EMPTY_ADDRESS,
+  );
   const [busy, setBusy] = useState(false);
 
-  const reset = () => {
+  // When `existing` changes (e.g. opening the dialog for a different client),
+  // reset the form to mirror it. Without this, switching targets would show
+  // stale values from the previous open.
+  useEffect(() => {
+    if (existing) {
+      setName(existing.name);
+      setContactName(existing.contactName ?? '');
+      setEmail(existing.email ?? '');
+      setTaxId(existing.taxId ?? '');
+      setCurrency(existing.defaultCurrency ?? defaultCurrency);
+      setAddress(addressFromClient(existing));
+    }
+  }, [existing, defaultCurrency]);
+
+  const resetToCreate = () => {
     setName('');
     setContactName('');
     setEmail('');
@@ -86,41 +120,66 @@ export function CreateClientDialog({
     }
     setBusy(true);
     try {
-      const client = await createClient({
-        name: name.trim(),
-        contactName: contactName.trim() || undefined,
-        email: email.trim() || undefined,
-        taxId: taxId.trim() || undefined,
-        defaultCurrency: currency,
-        address: addressHasContent(address)
-          ? {
-              line1: address.line1.trim(),
-              line2: address.line2.trim() || undefined,
-              city: address.city.trim(),
-              region: address.region.trim() || undefined,
-              postalCode: address.postalCode.trim(),
-              country: address.country.trim().toUpperCase() || 'US',
-            }
-          : undefined,
-      });
-      toast.success(`Added ${client.name}.`);
-      onCreated(client);
-      onOpenChange(false);
-      reset();
+      const addressPatch = addressHasContent(address)
+        ? {
+            line1: address.line1.trim(),
+            line2: address.line2.trim() || undefined,
+            city: address.city.trim(),
+            region: address.region.trim() || undefined,
+            postalCode: address.postalCode.trim(),
+            country: address.country.trim().toUpperCase() || 'US',
+          }
+        : undefined;
+
+      if (editing && existing) {
+        await updateClient(existing.id, {
+          name: name.trim(),
+          contactName: contactName.trim() || undefined,
+          email: email.trim() || undefined,
+          taxId: taxId.trim() || undefined,
+          defaultCurrency: currency,
+          address: addressPatch,
+        });
+        const fresh = await db.clients.get(existing.id);
+        toast.success(`Updated ${name.trim()}.`);
+        if (fresh) onSaved?.(fresh);
+        onOpenChange(false);
+      } else {
+        const client = await createClient({
+          name: name.trim(),
+          contactName: contactName.trim() || undefined,
+          email: email.trim() || undefined,
+          taxId: taxId.trim() || undefined,
+          defaultCurrency: currency,
+          address: addressPatch,
+        });
+        toast.success(`Added ${client.name}.`);
+        onSaved?.(client);
+        onOpenChange(false);
+        resetToCreate();
+      }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Could not add client');
+      toast.error(err instanceof Error ? err.message : 'Could not save client');
     } finally {
       setBusy(false);
     }
   };
 
   return (
-    <Dialog open={open} onOpenChange={(o) => { if (!o) reset(); onOpenChange(o); }}>
+    <Dialog
+      open={open}
+      onOpenChange={(o) => {
+        if (!o && !editing) resetToCreate();
+        onOpenChange(o);
+      }}
+    >
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Add a client</DialogTitle>
+          <DialogTitle>{editing ? 'Edit client' : 'Add a client'}</DialogTitle>
           <DialogDescription>
-            Only the name is required — you can fill in the rest later from the Clients page.
+            {editing
+              ? 'Changes apply to drafts and future invoices. Already-sent invoices keep the frozen snapshot of how the client looked at send time.'
+              : 'Only the name is required — you can fill in the rest later from the Clients page.'}
           </DialogDescription>
         </DialogHeader>
 
@@ -234,7 +293,7 @@ export function CreateClientDialog({
               Cancel
             </Button>
             <Button type="submit" disabled={busy || !name.trim()}>
-              {busy ? 'Adding…' : 'Add client'}
+              {busy ? 'Saving…' : editing ? 'Save changes' : 'Add client'}
             </Button>
           </DialogFooter>
         </form>

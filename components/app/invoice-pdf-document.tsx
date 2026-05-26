@@ -7,6 +7,7 @@ import {
   Text,
   View,
   Font,
+  Link,
 } from '@react-pdf/renderer';
 import type { Invoice } from '@/lib/types';
 import { computeTotals, formatDate, formatMoney, lineSubtotal } from '@/lib/format';
@@ -150,8 +151,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   footerRow: {
-    marginTop: 'auto',
-    paddingTop: 30,
     flexDirection: 'row',
     gap: 28,
     fontSize: 9.5,
@@ -166,6 +165,56 @@ const styles = StyleSheet.create({
     fontSize: 9,
     color: muted,
     fontStyle: 'italic',
+  },
+  payCard: {
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderWidth: 1,
+    borderColor: hairline,
+    borderRadius: 4,
+    backgroundColor: '#fafafa',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  bottomBlock: {
+    marginTop: 'auto',
+    paddingTop: 30,
+  },
+  bottomFooterRow: {
+    marginTop: 16,
+    flexDirection: 'row',
+    gap: 28,
+    fontSize: 9.5,
+    color: muted,
+  },
+  payCardLeft: { flex: 1, paddingRight: 16 },
+  payCardLabel: {
+    fontSize: 8,
+    letterSpacing: 1.5,
+    color: subtle,
+    textTransform: 'uppercase',
+    marginBottom: 4,
+  },
+  payCardCopy: {
+    fontSize: 10.5,
+    color: ink,
+    lineHeight: 1.3,
+  },
+  payButton: {
+    paddingVertical: 9,
+    paddingHorizontal: 16,
+    borderRadius: 4,
+    color: '#ffffff',
+    fontSize: 10,
+    fontFamily: FONT_SANS_MEDIUM,
+    textDecoration: 'none',
+  },
+  payFallback: {
+    marginTop: 6,
+    fontSize: 8,
+    color: subtle,
+    fontFamily: FONT_SANS,
   },
 });
 
@@ -314,22 +363,50 @@ export function InvoicePdfDocument({ invoice }: { invoice: Invoice }) {
           </View>
         ) : null}
 
-        {/* Footer: notes + payment */}
-        <View style={styles.footerRow}>
-          {invoice.notes ? (
-            <View style={styles.footerCol}>
-              <Text style={styles.sectionLabel}>Notes</Text>
-              <Text>{invoice.notes}</Text>
-            </View>
-          ) : (
-            <View style={styles.footerCol} />
-          )}
-          {invoice.paymentInstructions ? (
-            <View style={styles.footerCol}>
-              <Text style={styles.sectionLabel}>Payment</Text>
-              <Text>{invoice.paymentInstructions}</Text>
+        {/* Bottom block: pay-online card (optional) sits just above the
+            Notes / Payment footer so they read as a single closing section. */}
+        <View style={styles.bottomBlock}>
+          {invoice.stripePaymentLink ? (
+            <View style={styles.payCard} wrap={false}>
+              <View style={styles.payCardLeft}>
+                <Text style={styles.payCardLabel}>Pay online</Text>
+                <Text style={styles.payCardCopy}>
+                  Pay this invoice securely with a card or bank — instant receipt.
+                </Text>
+                <Text style={styles.payFallback}>
+                  If the button doesn’t work, paste this URL: {invoice.stripePaymentLink}
+                </Text>
+              </View>
+              <Link
+                src={invoice.stripePaymentLink}
+                style={[
+                  styles.payButton,
+                  { backgroundColor: p.accentColor || '#1a1a1a' },
+                ]}
+              >
+                Pay {formatMoney(totals.total, invoice.currency)}  ↗
+              </Link>
             </View>
           ) : null}
+
+          <View
+            style={invoice.stripePaymentLink ? styles.bottomFooterRow : styles.footerRow}
+          >
+            {invoice.notes ? (
+              <View style={styles.footerCol}>
+                <Text style={styles.sectionLabel}>Notes</Text>
+                <Text>{invoice.notes}</Text>
+              </View>
+            ) : (
+              <View style={styles.footerCol} />
+            )}
+            {invoice.paymentInstructions ? (
+              <View style={styles.footerCol}>
+                <Text style={styles.sectionLabel}>Payment</Text>
+                <Text>{invoice.paymentInstructions}</Text>
+              </View>
+            ) : null}
+          </View>
         </View>
 
       </Page>

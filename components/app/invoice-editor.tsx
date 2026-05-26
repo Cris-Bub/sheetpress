@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { ArrowLeft, Download, Plus, Trash2, Send, Share2, ChevronDown, Check } from 'lucide-react';
+import { ArrowLeft, Download, Plus, Trash2, Send, Share2, ChevronDown, Check, CreditCard, ExternalLink, Pencil } from 'lucide-react';
 import { markInvoiceSent, updateInvoice } from '@/lib/mutations';
 import { downloadInvoicePdf } from '@/lib/pdf';
 import { sendInvoiceEmail } from '@/lib/email';
@@ -33,7 +33,7 @@ import {
   CommandList,
 } from '@/components/ui/command';
 import { InvoicePreview } from '@/components/app/invoice-preview';
-import { CreateClientDialog } from '@/components/app/create-client-dialog';
+import { ClientFormDialog } from '@/components/app/create-client-dialog';
 import { useClients, useProfile, isLoaded } from '@/lib/queries';
 import { computeTotals, formatMoney, toMajor, toMinor } from '@/lib/format';
 import { cn } from '@/lib/utils';
@@ -52,6 +52,7 @@ type EditorState = {
   discount?: { type: 'percent' | 'amount'; value: number };
   notes: string;
   paymentInstructions: string;
+  stripePaymentLink: string;
 };
 
 const stateFromInvoice = (inv: Invoice): EditorState => ({
@@ -65,6 +66,7 @@ const stateFromInvoice = (inv: Invoice): EditorState => ({
   discount: inv.discount,
   notes: inv.notes ?? '',
   paymentInstructions: inv.paymentInstructions ?? '',
+  stripePaymentLink: inv.stripePaymentLink ?? '',
 });
 
 const stateToPatch = (s: EditorState): Partial<Invoice> => ({
@@ -77,6 +79,7 @@ const stateToPatch = (s: EditorState): Partial<Invoice> => ({
   discount: s.discount,
   notes: s.notes,
   paymentInstructions: s.paymentInstructions,
+  stripePaymentLink: s.stripePaymentLink.trim() || undefined,
 });
 
 export function InvoiceEditor({ existing }: { existing: Invoice }) {
@@ -167,6 +170,7 @@ export function InvoiceEditor({ existing }: { existing: Invoice }) {
     discount: state.discount,
     notes: state.notes,
     paymentInstructions: state.paymentInstructions,
+    stripePaymentLink: state.stripePaymentLink.trim() || undefined,
     status: 'draft',
     createdAt: existing.createdAt,
     updatedAt: existing.updatedAt,
@@ -220,10 +224,6 @@ export function InvoiceEditor({ existing }: { existing: Invoice }) {
   handleDownloadPdfRef.current = handleDownloadPdf;
 
   const handleShare = async () => {
-    if (!client?.email) {
-      toast.error('Add an email to this client first.');
-      return;
-    }
     try {
       // Flush pending edits so the rendered PDF matches what's on screen.
       await updateInvoice(existing.id, stateToPatch(state));
@@ -286,11 +286,10 @@ export function InvoiceEditor({ existing }: { existing: Invoice }) {
             <Button
               size="sm"
               onClick={handleShare}
-              disabled={!client?.email}
               title={
                 client?.email
                   ? `Share invoice with ${client.email} (⌘E)`
-                  : 'Add an email to this client to enable'
+                  : 'Share invoice (⌘E) — pick the recipient in your share sheet or mail app'
               }
             >
               <Share2 className="size-3.5" />
@@ -534,16 +533,26 @@ export function InvoiceEditor({ existing }: { existing: Invoice }) {
 
             <Section
               title="Payment & banking"
-              description="Where and how the client should pay you — bank details, Stripe link, PayPal, wire instructions."
+              description="Where and how the client should pay you — bank details, PayPal, wire instructions."
             >
               <Textarea
                 value={state.paymentInstructions}
                 onChange={(e) => update({ paymentInstructions: e.target.value })}
                 placeholder={
-                  'Bank: Chase\nRouting: 021000021\nAccount: ****1234\nOr pay via Stripe: stripe.com/…'
+                  'Bank: Chase\nRouting: 021000021\nAccount: ****1234'
                 }
                 rows={5}
                 className="font-mono text-xs"
+              />
+            </Section>
+
+            <Section
+              title="Pay online"
+              description="Paste a Stripe Payment Link (or any pay URL). We'll add a clickable “Pay invoice” button to the PDF and the share email."
+            >
+              <PayLinkInput
+                value={state.stripePaymentLink}
+                onChange={(v) => update({ stripePaymentLink: v })}
               />
             </Section>
 
@@ -669,6 +678,65 @@ function Field({
   );
 }
 
+function PayLinkInput({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const trimmed = value.trim();
+  let parsed: URL | null = null;
+  if (trimmed) {
+    try {
+      const u = new URL(trimmed);
+      if (u.protocol === 'https:' || u.protocol === 'http:') parsed = u;
+    } catch {
+      parsed = null;
+    }
+  }
+  const looksStripe = parsed?.hostname.endsWith('stripe.com');
+  const invalid = trimmed.length > 0 && !parsed;
+
+  return (
+    <div className="space-y-2">
+      <div className="relative">
+        <CreditCard className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none" />
+        <Input
+          type="url"
+          inputMode="url"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder="https://buy.stripe.com/…"
+          className={cn('pl-9 font-mono text-xs', invalid && 'border-destructive/60 focus-visible:ring-destructive/30')}
+          aria-invalid={invalid || undefined}
+        />
+      </div>
+      {invalid ? (
+        <p className="text-[11px] text-destructive">That doesn’t look like a URL. Paste the full link, starting with https://.</p>
+      ) : parsed ? (
+        <a
+          href={parsed.toString()}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-medium">
+            <Check className="size-3" />
+            {looksStripe ? 'Stripe link' : 'Link'}
+          </span>
+          Test it
+          <ExternalLink className="size-3" />
+        </a>
+      ) : (
+        <p className="text-[11px] text-muted-foreground/70">
+          Create one in your Stripe dashboard → Payment Links, then paste it here.
+        </p>
+      )}
+    </div>
+  );
+}
+
 function ClientPicker({
   clients,
   value,
@@ -682,74 +750,101 @@ function ClientPicker({
 }) {
   const [open, setOpen] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [editing, setEditing] = useState(false);
   const selected = clients.find((c) => c.id === value);
   return (
     <>
-      <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger
-          render={
-            <button className="w-full rounded-md border border-input bg-card px-4 py-3 text-left hover:bg-muted/30 transition-colors flex items-center justify-between gap-2" />
-          }
-        >
-          {selected ? (
-            <div className="min-w-0">
-              <div className="font-medium text-sm truncate">{selected.name}</div>
-              <div className="text-xs text-muted-foreground truncate">{selected.email}</div>
-            </div>
-          ) : (
-            <div className="text-sm text-muted-foreground">Choose a client…</div>
-          )}
-          <ChevronDown className="size-4 text-muted-foreground shrink-0" />
-        </PopoverTrigger>
-        <PopoverContent className="p-0 w-[440px]" align="start">
-          <Command>
-            <CommandInput placeholder="Search clients…" />
-            <CommandList>
-              <CommandEmpty>No clients found.</CommandEmpty>
-              {clients.length > 0 ? (
-                <CommandGroup heading="Your clients">
-                  {clients.map((c) => (
-                    <CommandItem
-                      key={c.id}
-                      value={c.name}
-                      onSelect={() => {
-                        onChange(c.id);
-                        setOpen(false);
-                      }}
-                    >
-                      <div>
-                        <div className="font-medium">{c.name}</div>
-                        {c.email ? <div className="text-xs text-muted-foreground">{c.email}</div> : null}
-                      </div>
-                    </CommandItem>
-                  ))}
+      <div className="flex items-stretch gap-2">
+        <Popover open={open} onOpenChange={setOpen}>
+          <PopoverTrigger
+            render={
+              <button className="flex-1 min-w-0 rounded-md border border-input bg-card px-4 py-3 text-left hover:bg-muted/30 transition-colors flex items-center justify-between gap-2" />
+            }
+          >
+            {selected ? (
+              <div className="min-w-0">
+                <div className="font-medium text-sm truncate">{selected.name}</div>
+                <div className="text-xs text-muted-foreground truncate">
+                  {selected.email || (
+                    <span className="italic text-muted-foreground/70">No email on file</span>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="text-sm text-muted-foreground">Choose a client…</div>
+            )}
+            <ChevronDown className="size-4 text-muted-foreground shrink-0" />
+          </PopoverTrigger>
+          <PopoverContent className="p-0 w-[440px]" align="start">
+            <Command>
+              <CommandInput placeholder="Search clients…" />
+              <CommandList>
+                <CommandEmpty>No clients found.</CommandEmpty>
+                {clients.length > 0 ? (
+                  <CommandGroup heading="Your clients">
+                    {clients.map((c) => (
+                      <CommandItem
+                        key={c.id}
+                        value={c.name}
+                        onSelect={() => {
+                          onChange(c.id);
+                          setOpen(false);
+                        }}
+                      >
+                        <div>
+                          <div className="font-medium">{c.name}</div>
+                          {c.email ? <div className="text-xs text-muted-foreground">{c.email}</div> : null}
+                        </div>
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                ) : null}
+                {/* Stable value so cmdk's filter doesn't hide this when the search
+                    query doesn't match any existing client name. */}
+                <CommandGroup>
+                  <CommandItem
+                    value="__add_new_client__"
+                    onSelect={() => {
+                      setOpen(false);
+                      setCreating(true);
+                    }}
+                    className="text-muted-foreground"
+                  >
+                    <Plus className="size-4" />
+                    Add a new client…
+                  </CommandItem>
                 </CommandGroup>
-              ) : null}
-              {/* Stable value so cmdk's filter doesn't hide this when the search
-                  query doesn't match any existing client name. */}
-              <CommandGroup>
-                <CommandItem
-                  value="__add_new_client__"
-                  onSelect={() => {
-                    setOpen(false);
-                    setCreating(true);
-                  }}
-                  className="text-muted-foreground"
-                >
-                  <Plus className="size-4" />
-                  Add a new client…
-                </CommandItem>
-              </CommandGroup>
-            </CommandList>
-          </Command>
-        </PopoverContent>
-      </Popover>
+              </CommandList>
+            </Command>
+          </PopoverContent>
+        </Popover>
 
-      <CreateClientDialog
+        {selected ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            className="size-auto self-stretch px-3"
+            onClick={() => setEditing(true)}
+            title={`Edit ${selected.name}`}
+            aria-label={`Edit ${selected.name}`}
+          >
+            <Pencil className="size-4" />
+          </Button>
+        ) : null}
+      </div>
+
+      <ClientFormDialog
         open={creating}
         onOpenChange={setCreating}
         defaultCurrency={defaultCurrency}
-        onCreated={(c) => onChange(c.id)}
+        onSaved={(c) => onChange(c.id)}
+      />
+      <ClientFormDialog
+        open={editing}
+        onOpenChange={setEditing}
+        defaultCurrency={defaultCurrency}
+        existing={selected}
       />
     </>
   );

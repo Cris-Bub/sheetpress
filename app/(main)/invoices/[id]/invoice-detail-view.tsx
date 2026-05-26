@@ -108,11 +108,6 @@ export function InvoiceDetailView({ id }: { id: string }) {
   };
 
   const handleShare = async () => {
-    const recipient = invoice.clientSnapshot?.email;
-    if (!recipient) {
-      toast.error('Add an email to this client first.');
-      return;
-    }
     try {
       const result = await sendInvoiceEmail(invoice);
       if (invoice.status === 'draft') {
@@ -189,11 +184,10 @@ export function InvoiceDetailView({ id }: { id: string }) {
             <Button
               size="sm"
               onClick={handleShare}
-              disabled={!invoice.clientSnapshot?.email}
               title={
                 invoice.clientSnapshot?.email
                   ? `Share invoice with ${invoice.clientSnapshot.email}`
-                  : 'Add an email to this client to enable'
+                  : 'Share invoice — pick the recipient in your share sheet or mail app'
               }
             >
               <Share2 className="size-3.5" />

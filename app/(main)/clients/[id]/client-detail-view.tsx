@@ -1,11 +1,13 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Plus, Mail, MapPin, Hash } from 'lucide-react';
+import { ArrowLeft, Plus, Mail, MapPin, Hash, Pencil } from 'lucide-react';
 import { PageHeader } from '@/components/app/page-header';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { StatusBadge } from '@/components/app/status-badge';
+import { ClientFormDialog } from '@/components/app/create-client-dialog';
 import { useClient, useInvoices, usePayments, isLoaded } from '@/lib/queries';
 import { computeTotals, formatDate, formatMoney } from '@/lib/format';
 import { effectiveStatus, paidAmountFor } from '@/lib/derive';
@@ -14,6 +16,7 @@ export function ClientDetailView({ id }: { id: string }) {
   const client = useClient(id);
   const allInvoices = useInvoices();
   const payments = usePayments();
+  const [editing, setEditing] = useState(false);
 
   if (!isLoaded(client) || !isLoaded(allInvoices) || !isLoaded(payments)) {
     return (
@@ -72,6 +75,10 @@ export function ClientDetailView({ id }: { id: string }) {
         <Button render={<Link href="/clients" />} variant="ghost" size="sm">
           <ArrowLeft className="size-4" />
           All clients
+        </Button>
+        <Button variant="outline" size="sm" onClick={() => setEditing(true)}>
+          <Pencil className="size-3.5" />
+          Edit details
         </Button>
         <Button render={<Link href="/invoices/new" />}>
           <Plus className="size-4" />
@@ -186,6 +193,13 @@ export function ClientDetailView({ id }: { id: string }) {
           ) : null}
         </aside>
       </div>
+
+      <ClientFormDialog
+        open={editing}
+        onOpenChange={setEditing}
+        defaultCurrency={client.defaultCurrency ?? 'USD'}
+        existing={client}
+      />
     </>
   );
 }

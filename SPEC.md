@@ -229,6 +229,12 @@ type Address = {
 - Auto-marks the invoice as `sent` the moment the share sheet / mailto link opens, only when the invoice was previously `draft`. If the user dismisses the Web Share sheet (`AbortError`), the status stays unchanged.
 - No backend, no OAuth, no transactional mail provider. The message leaves from the user's own apps, so deliverability is whatever their mailbox already gets.
 
+### 6.3.2 Pay-online link (optional)
+- Each invoice has an optional **Stripe Payment Link** field (the editor accepts any https URL, so Square, PayPal.me, etc. work too).
+- When set, the PDF gets a clickable **Pay {total}** button styled in the seller's accent color, the on-screen preview shows the matching card, and the share-email body includes a `Pay online: <url>` line above the signature.
+- Local-first stance preserved: we never call the Stripe API or store keys. The user pastes a link they created themselves in their Stripe dashboard; we just render it well.
+- Stored as `Invoice.stripePaymentLink`. The field travels through the backup ZIP and is preserved on re-import.
+
 ### 6.4 Invoice list / history
 - Default view: table sorted by issue date desc.
 - Columns: Number, Client, Issue Date, Due Date, Total, Status.
@@ -242,7 +248,7 @@ type Address = {
 - On an invoice's detail view: "Record payment" → date, amount, method, note.
 - Multiple payments per invoice → status auto-updates to `partial` or `paid` based on totals.
 - Payment history shown as a small log on the invoice.
-- (Optional v2) Stripe deep-link button on PDF.
+- Stripe Payment Link CTA on the PDF — see §6.3.2.
 
 ### 6.6 Clients
 - Lightweight CRUD. Name, email, address, tax ID, notes.
@@ -359,7 +365,6 @@ Saying no explicitly so the principles hold:
 - Quotes / estimates
 - Cloud sync via "bring your own storage"
 - Multiple templates
-- Stripe payment-link button on PDFs
 - Translations
 
 ---

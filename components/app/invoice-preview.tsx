@@ -142,26 +142,41 @@ export function InvoicePreview({ invoice, className }: { invoice: Invoice; class
         </div>
       ) : null}
 
-      {/* Notes + payment instructions */}
-      <div className="mt-auto pt-10 grid grid-cols-2 gap-8 text-[9.5pt] text-zinc-600">
-        {invoice.notes ? (
-          <div>
-            <div className="text-[9pt] uppercase tracking-widest text-zinc-400 mb-2">Notes</div>
-            <div className="whitespace-pre-line leading-relaxed">{invoice.notes}</div>
-          </div>
-        ) : (
-          <div />
-        )}
-        {invoice.paymentInstructions ? (
-          <div>
-            <div className="text-[9pt] uppercase tracking-widest text-zinc-400 mb-2">
-              Payment
-            </div>
-            <div className="whitespace-pre-line leading-relaxed">
-              {invoice.paymentInstructions}
-            </div>
-          </div>
+      {/* Bottom block: pay-online CTA (optional) sits just above the
+          Notes / Payment footer so they read as a single closing section. */}
+      <div className="mt-auto pt-10">
+        {invoice.stripePaymentLink ? (
+          <PayOnlineCard
+            href={invoice.stripePaymentLink}
+            accent={invoice.profileSnapshot.accentColor || '#1a1a1a'}
+            amount={formatMoney(totals.total, invoice.currency)}
+          />
         ) : null}
+        <div
+          className={cn(
+            'grid grid-cols-2 gap-8 text-[9.5pt] text-zinc-600',
+            invoice.stripePaymentLink ? 'mt-6' : '',
+          )}
+        >
+          {invoice.notes ? (
+            <div>
+              <div className="text-[9pt] uppercase tracking-widest text-zinc-400 mb-2">Notes</div>
+              <div className="whitespace-pre-line leading-relaxed">{invoice.notes}</div>
+            </div>
+          ) : (
+            <div />
+          )}
+          {invoice.paymentInstructions ? (
+            <div>
+              <div className="text-[9pt] uppercase tracking-widest text-zinc-400 mb-2">
+                Payment
+              </div>
+              <div className="whitespace-pre-line leading-relaxed">
+                {invoice.paymentInstructions}
+              </div>
+            </div>
+          ) : null}
+        </div>
       </div>
     </div>
   );
@@ -191,6 +206,55 @@ function Row({
     >
       <span>{label}</span>
       <span>{value}</span>
+    </div>
+  );
+}
+
+/**
+ * Pay-online card. Styled to live inside the invoice document: uses the seller's
+ * accent color, restrained typography, and a single clear CTA so it reads as
+ * part of the document rather than an injected ad.
+ */
+function PayOnlineCard({
+  href,
+  accent,
+  amount,
+}: {
+  href: string;
+  accent: string;
+  amount: string;
+}) {
+  return (
+    <div className="mt-8 rounded-md border border-zinc-200 bg-zinc-50 p-4 flex items-center justify-between gap-4">
+      <div className="min-w-0">
+        <div className="text-[9pt] uppercase tracking-widest text-zinc-400">Pay online</div>
+        <div className="mt-1 text-[10.5pt] text-zinc-700 leading-snug">
+          Pay this invoice securely with a card or bank — instant receipt.
+        </div>
+      </div>
+      <a
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="shrink-0 inline-flex items-center gap-2 px-4 py-2.5 rounded-md text-white text-[10pt] font-medium tracking-tight no-underline shadow-sm hover:shadow transition-shadow"
+        style={{ backgroundColor: accent }}
+      >
+        <span>Pay {amount}</span>
+        <svg
+          width="11"
+          height="11"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <path d="M7 17L17 7" />
+          <path d="M8 7h9v9" />
+        </svg>
+      </a>
     </div>
   );
 }

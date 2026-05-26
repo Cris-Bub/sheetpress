@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input';
 import { useClients, useInvoices, usePayments, useProfile, isLoaded } from '@/lib/queries';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/app/empty-state';
-import { CreateClientDialog } from '@/components/app/create-client-dialog';
+import { ClientFormDialog } from '@/components/app/create-client-dialog';
 import { ProportionBar, type Segment } from '@/components/app/proportion-bar';
 import type { InvoiceStatus } from '@/lib/types';
 import { computeTotals, formatMoney } from '@/lib/format';
@@ -108,11 +108,11 @@ export default function ClientsPage() {
             }
           />
         </div>
-        <CreateClientDialog
+        <ClientFormDialog
           open={createOpen}
           onOpenChange={setCreateOpen}
           defaultCurrency={profile?.defaultCurrency ?? 'USD'}
-          onCreated={(client) => router.push(`/clients/${client.id}`)}
+          onSaved={(client) => router.push(`/clients/${client.id}`)}
         />
       </>
     );
@@ -218,7 +218,7 @@ export default function ClientsPage() {
           ))}
         </div>
       </div>
-      <CreateClientDialog
+      <ClientFormDialog
         open={createOpen}
         onOpenChange={setCreateOpen}
         defaultCurrency={profile?.defaultCurrency ?? 'USD'}

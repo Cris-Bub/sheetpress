@@ -78,6 +78,10 @@ export type Invoice = {
   discount?: Discount;
   notes?: string;
   paymentInstructions?: string;
+  // Optional pay-online link. Treated as opaque — accepts any https URL the
+  // user pastes (Stripe Payment Link, Square, etc.). Rendered as a CTA on the
+  // PDF and previewed in the editor; never stored anywhere outside this row.
+  stripePaymentLink?: string;
   status: InvoiceStatus;
   createdAt: string;
   updatedAt: string;
