@@ -105,9 +105,11 @@ export function ShareLinkDialog({
   const activeLinks = (links ?? []).filter((l) => !l.revokedAt);
   const revokedLinks = (links ?? []).filter((l) => l.revokedAt);
 
+  const hasActive = activeLinks.length > 0;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Share this invoice</DialogTitle>
           <DialogDescription>
@@ -116,12 +118,12 @@ export function ShareLinkDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-5">
+        <div className="min-w-0 space-y-5">
           <div className="flex items-end gap-2">
-            <div className="flex-1 space-y-1.5">
+            <div className="flex-1 min-w-0 space-y-1.5">
               <label className="text-xs font-normal text-muted-foreground">Expiration</label>
               <Select value={expiry} onValueChange={(v) => setExpiry(v ?? 'never')}>
-                <SelectTrigger>
+                <SelectTrigger className="w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -133,9 +135,14 @@ export function ShareLinkDialog({
                 </SelectContent>
               </Select>
             </div>
-            <Button onClick={create} disabled={creating}>
+            <Button
+              onClick={create}
+              disabled={creating}
+              variant={hasActive ? 'outline' : 'default'}
+              className="shrink-0"
+            >
               <Link2 className="size-4" />
-              {creating ? 'Creating…' : 'Create link'}
+              {creating ? 'Creating…' : hasActive ? 'New link' : 'Create link'}
             </Button>
           </div>
 
@@ -152,34 +159,39 @@ export function ShareLinkDialog({
                 return (
                   <li
                     key={link.id}
-                    className="flex items-center gap-2 rounded-md border border-border bg-muted/30 px-3 py-2"
+                    className="rounded-md border border-border bg-muted/30 px-3 py-2 space-y-1"
                   >
-                    <code className="flex-1 text-xs font-mono truncate" title={publicUrl(link.token)}>
-                      {publicUrl(link.token)}
-                    </code>
-                    <span className="text-xs text-muted-foreground shrink-0">
+                    <div className="flex items-center gap-1">
+                      <code
+                        className="flex-1 min-w-0 text-xs font-mono truncate"
+                        title={publicUrl(link.token)}
+                      >
+                        {publicUrl(link.token)}
+                      </code>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 px-2 shrink-0"
+                        onClick={() => copy(link.token)}
+                        title="Copy link"
+                      >
+                        {isCopied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 px-2 shrink-0 text-muted-foreground hover:text-destructive"
+                        onClick={() => revoke(link.id)}
+                        title="Revoke"
+                      >
+                        <Trash2 className="size-3.5" />
+                      </Button>
+                    </div>
+                    <div className="text-[11px] text-muted-foreground">
                       {link.expiresAt
-                        ? `expires ${formatDate(link.expiresAt.slice(0, 10))}`
-                        : 'no expiry'}
-                    </span>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 px-2"
-                      onClick={() => copy(link.token)}
-                      title="Copy link"
-                    >
-                      {isCopied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 px-2 text-muted-foreground hover:text-destructive"
-                      onClick={() => revoke(link.id)}
-                      title="Revoke"
-                    >
-                      <Trash2 className="size-3.5" />
-                    </Button>
+                        ? `Expires ${formatDate(link.expiresAt.slice(0, 10))}`
+                        : 'Never expires'}
+                    </div>
                   </li>
                 );
               })}

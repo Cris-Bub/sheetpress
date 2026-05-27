@@ -13,6 +13,7 @@ import {
   Ban,
   Plus,
   Trash2,
+  Send,
   Share2,
   Link2,
 } from 'lucide-react';
@@ -113,23 +114,27 @@ export function InvoiceDetailView({ id }: { id: string }) {
   const handleShare = async () => {
     try {
       const result = await sendInvoiceEmail(invoice);
-      if (invoice.status === 'draft') {
-        await markInvoiceSent(invoice.id);
-        toast.success(
-          result.channel === 'web-share'
-            ? `Sharing invoice ${invoice.number} — marked as sent.`
-            : `Mail client opening — invoice ${invoice.number} marked as sent. PDF saved to Downloads.`,
-        );
-      } else {
-        toast.success(
-          result.channel === 'web-share'
-            ? 'Sharing invoice…'
-            : 'Mail client opening. PDF saved to Downloads.',
-        );
-      }
+      toast.success(
+        result.channel === 'web-share'
+          ? 'Sharing invoice…'
+          : 'Mail client opening. PDF saved to Downloads.',
+      );
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') return;
       toast.error(err instanceof Error ? err.message : 'Could not share');
+    }
+  };
+
+  const handlePublish = async () => {
+    if (working) return;
+    setWorking(true);
+    try {
+      await markInvoiceSent(invoice.id);
+      toast.success(`Invoice ${invoice.number} published.`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not publish');
+    } finally {
+      setWorking(false);
     }
   };
 
@@ -149,67 +154,86 @@ export function InvoiceDetailView({ id }: { id: string }) {
           </div>
           <div className="flex items-center gap-1.5 sm:gap-2">
             {status === 'draft' ? (
-              <Button
-                render={<Link href={`/invoices/${invoice.id}/edit`} />}
-                variant="outline"
-                size="sm"
-                title="Edit"
-              >
-                <Pencil className="size-3.5" />
-                <span className="hidden lg:inline">Edit</span>
-              </Button>
-            ) : null}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleDuplicate}
-              disabled={working}
-              title="Duplicate"
-            >
-              <Copy className="size-3.5" />
-              <span className="hidden lg:inline">Duplicate</span>
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              title="Download PDF"
-              onClick={async () => {
-                try {
-                  await downloadInvoicePdf(invoice);
-                } catch (err) {
-                  toast.error(err instanceof Error ? err.message : 'Could not download PDF');
-                }
-              }}
-            >
-              <Download className="size-3.5" />
-              <span className="hidden lg:inline">Download PDF</span>
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShareLinkOpen(true)}
-              disabled={invoice.status === 'draft'}
-              title={
-                invoice.status === 'draft'
-                  ? 'Mark this invoice sent to create a share link'
-                  : 'Create or copy a hosted link to this invoice'
-              }
-            >
-              <Link2 className="size-3.5" />
-              <span className="hidden lg:inline">Copy link</span>
-            </Button>
-            <Button
-              size="sm"
-              onClick={handleShare}
-              title={
-                invoice.clientSnapshot?.email
-                  ? `Share invoice with ${invoice.clientSnapshot.email}`
-                  : 'Share invoice — pick the recipient in your share sheet or mail app'
-              }
-            >
-              <Share2 className="size-3.5" />
-              <span className="hidden lg:inline">Share</span>
-            </Button>
+              <>
+                <Button
+                  render={<Link href={`/invoices/${invoice.id}/edit`} />}
+                  variant="outline"
+                  size="sm"
+                  title="Edit"
+                >
+                  <Pencil className="size-3.5" />
+                  <span className="hidden lg:inline">Edit</span>
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleDuplicate}
+                  disabled={working}
+                  title="Duplicate"
+                >
+                  <Copy className="size-3.5" />
+                  <span className="hidden lg:inline">Duplicate</span>
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={handlePublish}
+                  disabled={working}
+                  title="Publish — locks the invoice and unlocks sharing, downloads, and payment links"
+                >
+                  <Send className="size-3.5" />
+                  <span className="hidden lg:inline">Publish</span>
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleDuplicate}
+                  disabled={working}
+                  title="Duplicate"
+                >
+                  <Copy className="size-3.5" />
+                  <span className="hidden lg:inline">Duplicate</span>
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  title="Download PDF"
+                  onClick={async () => {
+                    try {
+                      await downloadInvoicePdf(invoice);
+                    } catch (err) {
+                      toast.error(err instanceof Error ? err.message : 'Could not download PDF');
+                    }
+                  }}
+                >
+                  <Download className="size-3.5" />
+                  <span className="hidden lg:inline">Download PDF</span>
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShareLinkOpen(true)}
+                  title="Create or copy a hosted link to this invoice"
+                >
+                  <Link2 className="size-3.5" />
+                  <span className="hidden lg:inline">Copy link</span>
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={handleShare}
+                  title={
+                    invoice.clientSnapshot?.email
+                      ? `Share invoice with ${invoice.clientSnapshot.email}`
+                      : 'Share invoice — pick the recipient in your share sheet or mail app'
+                  }
+                >
+                  <Share2 className="size-3.5" />
+                  <span className="hidden lg:inline">Share</span>
+                </Button>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -222,7 +246,7 @@ export function InvoiceDetailView({ id }: { id: string }) {
 
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_320px] gap-8 px-4 sm:px-8 py-4 sm:py-8 max-w-[1400px] mx-auto w-full">
         <div className="-mx-4 sm:mx-0 overflow-x-auto">
-          <div className="min-w-[640px] flex justify-center px-4 sm:px-0">
+          <div className="min-w-[640px] flex justify-center px-4 sm:px-8 py-4">
             <InvoicePreview invoice={invoice} />
           </div>
         </div>

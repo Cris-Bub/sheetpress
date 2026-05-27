@@ -154,6 +154,8 @@ export function lineItemToJson(item: LineItem) {
 
 export type InvoiceRowWithItems = InvoiceRow & {
   invoice_line_items?: LineItemRow[] | null;
+  client?: ClientRow | null;
+  profile?: ProfileRow | null;
 };
 
 export function invoiceFromRow(row: InvoiceRowWithItems): Invoice {
@@ -161,6 +163,15 @@ export function invoiceFromRow(row: InvoiceRowWithItems): Invoice {
     .slice()
     .sort((a, b) => a.position - b.position)
     .map(lineItemFromRow);
+
+  // Snapshots get frozen on publish (markInvoiceSent). Before that, fall back
+  // to the joined live client/profile so the list, header, PDF filename, and
+  // share-email body all have real values to render. The frozen JSONB still
+  // wins once it exists — that's the legal-record invariant.
+  const liveClient = row.client ? clientFromRow(row.client) : null;
+  const liveProfile = row.profile ? profileFromRow(row.profile) : null;
+  const savedClientSnapshot = row.client_snapshot as unknown as Client | null;
+  const savedProfileSnapshot = row.profile_snapshot as unknown as Profile | null;
 
   return {
     id: row.id,
@@ -179,14 +190,14 @@ export function invoiceFromRow(row: InvoiceRowWithItems): Invoice {
     status: row.status,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
-    // Snapshots are populated only after send. Pre-send the editor renders
-    // from the live profile and client picker, so we fall back to empty.
-    clientSnapshot: (row.client_snapshot as unknown as Client | null) ?? {
-      id: row.client_id ?? '',
-      name: '',
-      createdAt: row.created_at,
-    },
-    profileSnapshot: (row.profile_snapshot as unknown as Profile | null) ?? ({} as Profile),
+    clientSnapshot:
+      savedClientSnapshot ??
+      liveClient ?? {
+        id: row.client_id ?? '',
+        name: '',
+        createdAt: row.created_at,
+      },
+    profileSnapshot: savedProfileSnapshot ?? liveProfile ?? ({} as Profile),
   };
 }
 

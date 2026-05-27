@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
-import { Search, MoreHorizontal, Download, Copy, Eye, CheckCircle2, Ban, ChevronUp, ChevronDown } from 'lucide-react';
+import { Search, MoreHorizontal, Download, Copy, Eye, CheckCircle2, Ban, ChevronUp, ChevronDown, Trash2 } from 'lucide-react';
 import { PageHeader } from '@/components/app/page-header';
 import { StatusBadge } from '@/components/app/status-badge';
 import { Button } from '@/components/ui/button';
@@ -22,7 +22,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/app/empty-state';
 import { computeTotals, formatDate, formatMoney } from '@/lib/format';
 import { downloadInvoicePdf } from '@/lib/pdf';
-import { duplicateInvoice, voidInvoice } from '@/lib/mutations';
+import { duplicateInvoice, voidInvoice, deleteInvoiceDraft } from '@/lib/mutations';
 import { toast } from 'sonner';
 import { useRouter } from 'next/navigation';
 import { ConfirmDialog } from '@/components/app/confirm-dialog';
@@ -58,6 +58,8 @@ export default function InvoicesPage() {
   const [sort, setSort] = useState<{ by: SortKey; dir: SortDir }>({ by: 'issued', dir: 'desc' });
   const [voidingInv, setVoidingInv] = useState<Invoice | null>(null);
   const [voidWorking, setVoidWorking] = useState(false);
+  const [deletingInv, setDeletingInv] = useState<Invoice | null>(null);
+  const [deleteWorking, setDeleteWorking] = useState(false);
   const [payingInv, setPayingInv] = useState<Invoice | null>(null);
   const router = useRouter();
 
@@ -92,6 +94,20 @@ export default function InvoicesPage() {
       toast.error(err instanceof Error ? err.message : 'Could not void');
     } finally {
       setVoidWorking(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!deletingInv) return;
+    setDeleteWorking(true);
+    try {
+      await deleteInvoiceDraft(deletingInv.id);
+      toast.success(`Draft ${deletingInv.number} deleted.`);
+      setDeletingInv(null);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not delete');
+    } finally {
+      setDeleteWorking(false);
     }
   };
 
@@ -283,9 +299,11 @@ export default function InvoicesPage() {
                             <DropdownMenuItem render={<Link href={`/invoices/${inv.id}`} />}>
                               <Eye className="size-4" /> View
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleDownload(inv)}>
-                              <Download className="size-4" /> Download PDF
-                            </DropdownMenuItem>
+                            {status !== 'draft' ? (
+                              <DropdownMenuItem onClick={() => handleDownload(inv)}>
+                                <Download className="size-4" /> Download PDF
+                              </DropdownMenuItem>
+                            ) : null}
                             <DropdownMenuItem onClick={() => handleDuplicate(inv)}>
                               <Copy className="size-4" /> Duplicate
                             </DropdownMenuItem>
@@ -301,6 +319,14 @@ export default function InvoicesPage() {
                                 onClick={() => setVoidingInv(inv)}
                               >
                                 <Ban className="size-4" /> Void
+                              </DropdownMenuItem>
+                            ) : null}
+                            {status === 'draft' ? (
+                              <DropdownMenuItem
+                                className="text-destructive"
+                                onClick={() => setDeletingInv(inv)}
+                              >
+                                <Trash2 className="size-4" /> Delete draft
                               </DropdownMenuItem>
                             ) : null}
                           </DropdownMenuContent>
@@ -329,6 +355,16 @@ export default function InvoicesPage() {
         destructive
         busy={voidWorking}
         onConfirm={handleVoid}
+      />
+      <ConfirmDialog
+        open={deletingInv !== null}
+        onOpenChange={(open) => { if (!open) setDeletingInv(null); }}
+        title={deletingInv ? `Delete draft ${deletingInv.number}?` : ''}
+        description="The invoice number will not be reused. Are you sure?"
+        confirmLabel="Delete draft"
+        destructive
+        busy={deleteWorking}
+        onConfirm={handleDelete}
       />
       {payingInv ? (
         <RecordPaymentDialog

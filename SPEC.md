@@ -215,23 +215,30 @@ type Address = {
 ### 6.2 Create / edit invoice (the main screen)
 - **Split layout.** Form on left, live PDF preview on right (toggleable on mobile).
 - Form sections, top to bottom: *From* (profile picker if multiple), *To* (client picker with inline "create new"), *Details* (number, dates, currency), *Items* (table with add-row), *Totals* (auto-computed, with discount + tax controls), *Notes & payment instructions*.
-- **Keyboard-first:** `Tab` moves through fields; `Cmd+Enter` saves; `Cmd+D` downloads PDF; `Cmd+S` marks sent.
-- Auto-save to IndexedDB as `draft` on every change (debounced). No "Save" button needed.
+- **Keyboard-first:** `Tab` moves through fields; `Cmd+Enter` or `Cmd+S` publishes.
+- Auto-save to Supabase as `draft` on every change (debounced). No "Save" button needed.
 - Invoice number auto-generates from profile's format; user can override.
-- Validation inline; cannot mark `sent` until required fields are filled.
+- **Drafts have one primary action: Publish.** Download PDF, Share, and Copy link are deliberately not exposed on drafts — distribution is gated behind publish so anything the user sends or links has frozen snapshots backing it. Validation inline; publish cannot succeed until required fields are filled.
 
-### 6.3 Download PDF
-- Single button: "Download PDF". Generates client-side via react-pdf. File saved as `{businessName}-{invoiceNumber}.pdf`.
+### 6.3 Publish & distribute
+- **Publish** is the single transition out of `draft`. Available in the editor toolbar (primary, `⌘S`) and on the draft detail page. It flushes pending edits, marks the invoice `sent`, and freezes the client + profile snapshots that all distribution surfaces (PDF, share email, public pay link) render from.
+- Once published, the detail-page toolbar swaps to **Duplicate / Download PDF / Copy link / Share**. The draft-only Edit button is gone — published invoices are immutable; to revise, duplicate into a new draft.
+
+### 6.3.1 Download PDF (published only)
+- Single button: "Download PDF" on the published-invoice detail view. Generates client-side via react-pdf. File saved as `{businessName}-{invoiceNumber}.pdf`.
 - (v2) "Copy as PDF" — copies the Blob to clipboard for paste-into-email apps that support it.
 
-### 6.3.1 Share invoice
-- "Share" button on the editor (primary action, ⌘E) and on the invoice detail view. Disabled until the client has an email on file.
+### 6.3.2 Share invoice (published only)
+- "Share" button on the published-invoice detail view. It hands the PDF straight to the user's apps — no auto-status-change because publishing already happened.
 - On Mac/iOS Safari and other browsers with the Web Share API + file support, hands the PDF + pre-filled subject/body/recipient to the native share sheet — Mail, Messages, AirDrop, and any other share extension the user has installed. Apple Mail receives the file pre-attached.
 - Everywhere else (desktop Chrome/Firefox/Edge, Windows, Linux): opens `mailto:` with subject + body pre-filled, and triggers a PDF download so the user drags it into the compose window.
-- Auto-marks the invoice as `sent` the moment the share sheet / mailto link opens, only when the invoice was previously `draft`. If the user dismisses the Web Share sheet (`AbortError`), the status stays unchanged.
 - No backend, no OAuth, no transactional mail provider. The message leaves from the user's own apps, so deliverability is whatever their mailbox already gets.
 
-### 6.3.2 Pay-online link (optional)
+### 6.3.3 Copy link (published only)
+- "Copy link" opens the share-link dialog and lets the user mint an opaque-token URL at `/pay/{token}`. Expirations: never / 7 / 30 / 90 days. Existing links can be revoked from the same dialog.
+- The public page is read-only and renders the frozen snapshot — never the live editor state.
+
+### 6.3.4 Pay-online link (optional)
 - Each invoice has an optional **Stripe Payment Link** field (the editor accepts any https URL, so Square, PayPal.me, etc. work too).
 - When set, the PDF gets a clickable **Pay {total}** button styled in the seller's accent color, the on-screen preview shows the matching card, and the share-email body includes a `Pay online: <url>` line above the signature.
 - Local-first stance preserved: we never call the Stripe API or store keys. The user pastes a link they created themselves in their Stripe dashboard; we just render it well.
@@ -243,14 +250,14 @@ type Address = {
 - Issued, Due, Status, and Amount column headers are clickable to sort; clicking again flips direction. Status sorts by urgency (overdue → partial → sent → draft → paid → void). Sort is session-only — defaults restore on reload.
 - Status filter chips: All / Draft / Sent / Paid / Partial / Overdue.
 - Client filter, date range, search (number + client name + line item text).
-- Row actions: View, Edit (drafts only), Duplicate, Download PDF, Mark Paid, Void.
+- Row actions: View, Edit (drafts only), Duplicate, Download PDF (published only), Mark Paid, Void.
 - Bulk: Export selected as ZIP of PDFs (v2).
 
 ### 6.5 Payment tracking
 - On an invoice's detail view: "Record payment" → date, amount, method, note.
 - Multiple payments per invoice → status auto-updates to `partial` or `paid` based on totals.
 - Payment history shown as a small log on the invoice.
-- Stripe Payment Link CTA on the PDF — see §6.3.2.
+- Stripe Payment Link CTA on the PDF — see §6.3.4.
 
 ### 6.6 Clients
 - Lightweight CRUD. Name, email, address, tax ID, notes.

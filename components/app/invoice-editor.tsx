@@ -4,10 +4,8 @@ import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { ArrowLeft, Download, Plus, Trash2, Send, Share2, ChevronDown, Check, CreditCard, ExternalLink, Pencil } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Send, ChevronDown, Check, CreditCard, ExternalLink, Pencil } from 'lucide-react';
 import { markInvoiceSent, updateInvoice } from '@/lib/mutations';
-import { downloadInvoicePdf } from '@/lib/pdf';
-import { sendInvoiceEmail } from '@/lib/email';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -107,32 +105,16 @@ export function InvoiceEditor({ existing }: { existing: Invoice }) {
     return () => clearTimeout(handle);
   }, [state, existing.id]);
 
-  // Keyboard shortcuts per SPEC §6.2. Must live above the early return
-  // below so React's hooks order stays stable across renders.
-  // Refs avoid re-binding the listener every state change.
-  const handleMarkSentRef = useRef(() => Promise.resolve());
-  const handleDownloadPdfRef = useRef(() => Promise.resolve());
-  const handleShareRef = useRef(() => Promise.resolve());
+  // Keyboard shortcut: Cmd+Enter / Cmd+S → Publish. Download and Share are
+  // unavailable on drafts (post-publish actions only), so no shortcuts here.
+  // Must live above the early return below so hooks order stays stable.
+  const handlePublishRef = useRef(() => Promise.resolve());
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!(e.metaKey || e.ctrlKey)) return;
-      // Cmd+Enter or Cmd+S → mark sent
       if (e.key === 'Enter' || e.key.toLowerCase() === 's') {
         e.preventDefault();
-        void handleMarkSentRef.current();
-        return;
-      }
-      // Cmd+D → download PDF
-      if (e.key.toLowerCase() === 'd') {
-        e.preventDefault();
-        void handleDownloadPdfRef.current();
-        return;
-      }
-      // Cmd+E → share invoice
-      if (e.key.toLowerCase() === 'e') {
-        e.preventDefault();
-        void handleShareRef.current();
-        return;
+        void handlePublishRef.current();
       }
     };
     window.addEventListener('keydown', onKey);
@@ -192,17 +174,18 @@ export function InvoiceEditor({ existing }: { existing: Invoice }) {
   const removeLine = (id: string) =>
     setState((s) => ({ ...s, lineItems: s.lineItems.filter((l) => l.id !== id) }));
 
-  const handleMarkSent = async () => {
+  const handlePublish = async () => {
     if (marking) return;
     setMarking(true);
     try {
-      // Flush any pending edits first so the DB matches what the user sees.
+      // Flush pending edits so the snapshot the publish trigger freezes
+      // matches what the user sees.
       await updateInvoice(existing.id, stateToPatch(state));
       await markInvoiceSent(existing.id);
-      toast.success(`Invoice ${existing.number} marked sent.`);
+      toast.success(`Invoice ${existing.number} published.`);
       router.replace(`/invoices/${existing.id}`);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Could not mark sent');
+      toast.error(err instanceof Error ? err.message : 'Could not publish');
       setMarking(false);
     }
   };
@@ -210,47 +193,7 @@ export function InvoiceEditor({ existing }: { existing: Invoice }) {
   // (bound once in a useEffect above) reading the latest handler closure
   // without re-binding on every state change.
   // eslint-disable-next-line react-hooks/refs
-  handleMarkSentRef.current = handleMarkSent;
-
-  const handleDownloadPdf = async () => {
-    try {
-      await updateInvoice(existing.id, stateToPatch(state));
-      await downloadInvoicePdf(previewInvoice);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Could not download PDF');
-    }
-  };
-  // eslint-disable-next-line react-hooks/refs
-  handleDownloadPdfRef.current = handleDownloadPdf;
-
-  const handleShare = async () => {
-    try {
-      // Flush pending edits so the rendered PDF matches what's on screen.
-      await updateInvoice(existing.id, stateToPatch(state));
-      const result = await sendInvoiceEmail(previewInvoice);
-      if (existing.status === 'draft') {
-        await markInvoiceSent(existing.id);
-        toast.success(
-          result.channel === 'web-share'
-            ? `Sharing invoice ${existing.number} — marked as sent.`
-            : `Mail client opening — invoice ${existing.number} marked as sent. PDF saved to Downloads.`,
-        );
-        router.replace(`/invoices/${existing.id}`);
-      } else {
-        toast.success(
-          result.channel === 'web-share'
-            ? 'Sharing invoice…'
-            : 'Mail client opening. PDF saved to Downloads.',
-        );
-      }
-    } catch (err) {
-      // User dismissed the share sheet — silent.
-      if (err instanceof DOMException && err.name === 'AbortError') return;
-      toast.error(err instanceof Error ? err.message : 'Could not share');
-    }
-  };
-  // eslint-disable-next-line react-hooks/refs
-  handleShareRef.current = handleShare;
+  handlePublishRef.current = handlePublish;
 
   return (
     <div className="flex flex-col h-screen">
@@ -273,28 +216,15 @@ export function InvoiceEditor({ existing }: { existing: Invoice }) {
             <SavedIndicator savedAt={savedAt} />
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={handleDownloadPdf} title="Download PDF (⌘D)">
-              <Download className="size-3.5" />
-              Download PDF
-              <kbd className="ml-1 hidden md:inline text-[10px] text-muted-foreground font-mono">⌘D</kbd>
-            </Button>
-            <Button variant="outline" size="sm" onClick={handleMarkSent} disabled={marking} title="Mark sent (⌘S)">
-              <Send className="size-3.5" />
-              Mark sent
-              <kbd className="ml-1 hidden md:inline text-[10px] text-muted-foreground font-mono">⌘S</kbd>
-            </Button>
             <Button
               size="sm"
-              onClick={handleShare}
-              title={
-                client?.email
-                  ? `Share invoice with ${client.email} (⌘E)`
-                  : 'Share invoice (⌘E) — pick the recipient in your share sheet or mail app'
-              }
+              onClick={handlePublish}
+              disabled={marking}
+              title="Publish (⌘S) — locks the invoice and unlocks sharing, downloads, and payment links"
             >
-              <Share2 className="size-3.5" />
-              Share
-              <kbd className="ml-1 hidden md:inline text-[10px] text-primary-foreground/70 font-mono">⌘E</kbd>
+              <Send className="size-3.5" />
+              {marking ? 'Publishing…' : 'Publish'}
+              <kbd className="ml-1 hidden md:inline text-[10px] text-primary-foreground/70 font-mono">⌘S</kbd>
             </Button>
           </div>
         </div>

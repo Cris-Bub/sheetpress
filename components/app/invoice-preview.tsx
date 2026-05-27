@@ -31,7 +31,7 @@ export function InvoicePreview({ invoice, className }: { invoice: Invoice; class
   return (
     <div
       className={cn(
-        'bg-white text-zinc-900 shadow-[0_1px_3px_rgba(0,0,0,0.08),0_8px_24px_-12px_rgba(0,0,0,0.18)] rounded-sm',
+        'bg-white text-zinc-900 shadow-[0_1px_2px_rgba(0,0,0,0.06),0_10px_24px_-6px_rgba(0,0,0,0.12),0_28px_48px_-16px_rgba(0,0,0,0.10)] rounded-sm',
         'aspect-[210/297] w-full max-w-[820px]',
         'p-[8%] flex flex-col font-sans',
         className,

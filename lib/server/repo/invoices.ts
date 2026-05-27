@@ -11,6 +11,8 @@ import type { EditableInvoicePatch, Invoice, LineItem } from '@/lib/types';
 
 const INVOICE_SELECT = `
   *,
+  client:clients (*),
+  profile:profiles (*),
   invoice_line_items (
     id, invoice_id, position, description, quantity, unit_price, tax_rate
   )
