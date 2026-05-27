@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { toast } from 'sonner';
 import {
   Dialog,
@@ -61,7 +61,18 @@ function addressFromClient(c: Client): AddressDraft {
  * omit it to create a new one. Used both from the invoice editor's picker
  * (inline add/edit) and from the Clients detail page.
  */
-export function ClientFormDialog({
+export function ClientFormDialog(props: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  defaultCurrency: string;
+  existing?: Client;
+  onSaved?: (client: Client) => void;
+}) {
+  const formKey = props.existing?.id ?? `new-${props.defaultCurrency}`;
+  return <ClientFormDialogInner key={formKey} {...props} />;
+}
+
+function ClientFormDialogInner({
   open,
   onOpenChange,
   defaultCurrency,
@@ -84,20 +95,6 @@ export function ClientFormDialog({
     existing ? addressFromClient(existing) : EMPTY_ADDRESS,
   );
   const [busy, setBusy] = useState(false);
-
-  // When `existing` changes (e.g. opening the dialog for a different client),
-  // reset the form to mirror it. Without this, switching targets would show
-  // stale values from the previous open.
-  useEffect(() => {
-    if (existing) {
-      setName(existing.name);
-      setContactName(existing.contactName ?? '');
-      setEmail(existing.email ?? '');
-      setTaxId(existing.taxId ?? '');
-      setCurrency(existing.defaultCurrency ?? defaultCurrency);
-      setAddress(addressFromClient(existing));
-    }
-  }, [existing, defaultCurrency]);
 
   const resetToCreate = () => {
     setName('');

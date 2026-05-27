@@ -7,7 +7,7 @@ import {
   type InvoiceRowWithItems,
 } from '@/lib/server/mapping';
 import { requireWorkspace } from '@/lib/server/workspace';
-import type { Invoice, LineItem } from '@/lib/types';
+import type { EditableInvoicePatch, Invoice, LineItem } from '@/lib/types';
 
 const INVOICE_SELECT = `
   *,
@@ -92,12 +92,22 @@ export async function createInvoiceDraft(): Promise<Invoice> {
  */
 export async function updateInvoice(
   id: string,
-  patch: Partial<Omit<Invoice, 'lineItems' | 'createdAt' | 'updatedAt'>>,
+  patch: Omit<EditableInvoicePatch, 'lineItems'>,
 ): Promise<void> {
   const supabase = await getSupabaseServerClient();
   await requireWorkspace();
   const update = invoiceToUpdate(patch);
   if (Object.keys(update).length === 0) return;
+  const { data: inv, error: readErr } = await supabase
+    .from('invoices')
+    .select('status')
+    .eq('id', id)
+    .maybeSingle();
+  if (readErr) throw readErr;
+  if (!inv) throw new Error('Invoice not found.');
+  if (inv.status !== 'draft') {
+    throw new Error('Only draft invoices can be edited.');
+  }
   const { error } = await supabase.from('invoices').update(update).eq('id', id);
   if (error) throw error;
 }
@@ -105,6 +115,16 @@ export async function updateInvoice(
 export async function replaceInvoiceLineItems(invoiceId: string, items: LineItem[]): Promise<void> {
   const supabase = await getSupabaseServerClient();
   await requireWorkspace();
+  const { data: inv, error: readErr } = await supabase
+    .from('invoices')
+    .select('status')
+    .eq('id', invoiceId)
+    .maybeSingle();
+  if (readErr) throw readErr;
+  if (!inv) throw new Error('Invoice not found.');
+  if (inv.status !== 'draft') {
+    throw new Error('Only draft invoices can be edited.');
+  }
   const { error } = await supabase.rpc('replace_invoice_line_items', {
     p_invoice_id: invoiceId,
     p_items: items.map(lineItemToJson),

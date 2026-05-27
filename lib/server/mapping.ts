@@ -1,6 +1,15 @@
 import 'server-only';
 import type { Database, Json } from '@/lib/supabase/types';
-import type { Address, Client, Discount, Invoice, LineItem, Payment, Profile } from '@/lib/types';
+import type {
+  Address,
+  Client,
+  Discount,
+  EditableInvoicePatch,
+  Invoice,
+  LineItem,
+  Payment,
+  Profile,
+} from '@/lib/types';
 
 type ProfileRow = Database['public']['Tables']['profiles']['Row'];
 type ClientRow = Database['public']['Tables']['clients']['Row'];
@@ -181,9 +190,8 @@ export function invoiceFromRow(row: InvoiceRowWithItems): Invoice {
   };
 }
 
-export function invoiceToUpdate(patch: Partial<Invoice>): Database['public']['Tables']['invoices']['Update'] {
+export function invoiceToUpdate(patch: EditableInvoicePatch): Database['public']['Tables']['invoices']['Update'] {
   const out: Database['public']['Tables']['invoices']['Update'] = {};
-  if (patch.profileId !== undefined) out.profile_id = patch.profileId;
   if (patch.clientId !== undefined) out.client_id = patch.clientId === '' ? null : patch.clientId;
   if (patch.number !== undefined) out.number = patch.number;
   if (patch.issueDate !== undefined) out.issue_date = patch.issueDate;
@@ -194,9 +202,6 @@ export function invoiceToUpdate(patch: Partial<Invoice>): Database['public']['Ta
   if (patch.notes !== undefined) out.notes = patch.notes ?? null;
   if (patch.paymentInstructions !== undefined) out.payment_instructions = patch.paymentInstructions ?? null;
   if (patch.stripePaymentLink !== undefined) out.stripe_payment_link = patch.stripePaymentLink ?? null;
-  if (patch.status !== undefined) out.status = patch.status;
-  if (patch.clientSnapshot !== undefined) out.client_snapshot = patch.clientSnapshot as unknown as Json;
-  if (patch.profileSnapshot !== undefined) out.profile_snapshot = patch.profileSnapshot as unknown as Json;
   return out;
 }
 

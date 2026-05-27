@@ -14,7 +14,7 @@ export type PublicInvoiceView = {
   issueDate: string;
   dueDate: string;
   currency: string;
-  status: 'sent' | 'paid' | 'partial' | 'overdue' | 'void';
+  status: 'sent' | 'paid' | 'partial' | 'overdue';
   discount: Discount | null;
   defaultTaxRate: number | null;
   notes: string | null;
@@ -47,7 +47,7 @@ export async function revokePublicLinkAction(linkId: string): Promise<void> {
 
 /**
  * Resolves a token to a frozen invoice view. Returns null for missing,
- * revoked, expired, or draft invoices. Never exposes internal IDs.
+ * revoked, expired, draft, or void invoices. Never exposes internal IDs.
  */
 export async function getPublicInvoiceByTokenAction(
   token: string,

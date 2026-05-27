@@ -39,9 +39,9 @@ The browser **never writes business data directly**. Reads can go through server
 
 - ✅ **Phase 0 — Fork & re-contract.** Branch created, SPEC §9 re-opened for SaaS items, DESIGN §13 added for setup-gated UI, this doc landed.
 - ✅ **Phase 1 — Supabase foundation.** Local schema, RLS, transaction-safe numbering function, server data-access scaffolding.
-- ✅ **Phase 2 — Auth & app shell.** `@supabase/ssr` cookie sessions, middleware route protection, login/signup, account-aware gate.
+- ✅ **Phase 2 — Auth & app shell.** `@supabase/ssr` cookie sessions, Next Proxy route protection, login/signup, account-aware gate.
 - ✅ **Phase 3 — Manual invoice parity.** Dexie replaced with Supabase repos under the same hook signatures; backup ZIP import lands data into the authenticated workspace.
-- ⏳ **Phase 4** — Hosted invoice links + Storage. Not started.
+- ✅ **Phase 4 — Hosted invoice links + Storage.** Public `/pay/[token]`, opaque-token link management, private storage buckets, and `invoice_pdf_versions` schema are in place. PDF upload/version population remains a follow-up.
 - ⏳ **Phase 5** — Stripe Connect + payable invoices. Not started.
 - ⏳ **Phase 6** — Payment schedules. Not started.
 - ⏳ **Phase 7** — App email & reminders. Not started.
@@ -67,7 +67,7 @@ The browser **never writes business data directly**. Reads can go through server
 
 ### Phase 2 — Auth and app shell
 - Supabase Auth via `@supabase/ssr` cookie sessions.
-- Middleware refreshes the session cookie and protects `/`, `/invoices`, `/clients`, `/settings`.
+- Next Proxy refreshes the session cookie and protects `/`, `/invoices`, `/clients`, `/settings`.
 - Replace `OnboardingGate` with an account-aware version: signed-out → `/login`; signed-in without a profile → `/onboarding`; otherwise pass through.
 - First workspace auto-created on signup. Teams stay hidden in the UI for v1.
 - Preserve the existing sidebar/editor/detail IA — this is a sheetPress fork, not a generic SaaS dashboard.

@@ -58,7 +58,7 @@ export async function createPublicLink(
   const supabase = await getSupabaseServerClient();
   const { workspaceId, userId } = await requireWorkspace();
 
-  // Sanity: the invoice must belong to this workspace and not be a draft.
+  // Sanity: the invoice must belong to this workspace and be an active issued invoice.
   const { data: inv, error: invErr } = await supabase
     .from('invoices')
     .select('id, status, workspace_id')
@@ -69,6 +69,9 @@ export async function createPublicLink(
   if (inv.workspace_id !== workspaceId) throw new Error('Forbidden.');
   if (inv.status === 'draft') {
     throw new Error('Send the invoice before creating a share link.');
+  }
+  if (inv.status === 'void') {
+    throw new Error('Voided invoices cannot be shared.');
   }
 
   const expiresAt = options?.expiresInDays

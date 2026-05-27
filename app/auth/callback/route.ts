@@ -1,6 +1,11 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { getSupabaseServerClient } from '@/lib/supabase/server';
 
+function safeNext(value: string | null): string {
+  if (value && value.startsWith('/') && !value.startsWith('//')) return value;
+  return '/';
+}
+
 /**
  * Exchanges an email-confirmation / magic-link / OAuth code for a session.
  * Supabase redirects here after the user clicks the link in their inbox.
@@ -8,16 +13,13 @@ import { getSupabaseServerClient } from '@/lib/supabase/server';
 export async function GET(request: NextRequest) {
   const url = request.nextUrl;
   const code = url.searchParams.get('code');
-  const next = url.searchParams.get('next') || '/';
+  const next = safeNext(url.searchParams.get('next'));
 
   if (code) {
     const supabase = await getSupabaseServerClient();
     const { error } = await supabase.auth.exchangeCodeForSession(code);
     if (!error) {
-      const redirect = url.clone();
-      redirect.pathname = next.startsWith('/') ? next : '/';
-      redirect.search = '';
-      return NextResponse.redirect(redirect);
+      return NextResponse.redirect(new URL(next, url.origin));
     }
   }
 

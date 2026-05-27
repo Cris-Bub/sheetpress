@@ -63,7 +63,6 @@ export default function InvoicesPage() {
 
   const invoices = useInvoices();
   const payments = usePayments();
-  const now = new Date();
 
   const handleDownload = async (inv: Invoice) => {
     try {
@@ -98,12 +97,17 @@ export default function InvoicesPage() {
 
   const filtered = useMemo(() => {
     if (!isLoaded(invoices) || !isLoaded(payments)) return [];
+    const now = new Date();
     return [...invoices]
-      .map((inv) => ({
-        inv,
-        status: effectiveStatus(inv, payments, now),
-        total: computeTotals(inv).total,
-      }))
+      .map((inv) => {
+        const status = effectiveStatus(inv, payments, now);
+        return {
+          inv,
+          status,
+          total: computeTotals(inv).total,
+          overdueDays: status === 'overdue' ? daysOverdue(inv, now) : 0,
+        };
+      })
       .filter(({ inv, status }) => {
         if (filter !== 'all' && status !== filter) return false;
         if (q.trim()) {
@@ -229,10 +233,9 @@ export default function InvoicesPage() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map(({ inv, status, total }) => {
+                {filtered.map(({ inv, status, total, overdueDays }) => {
                   const paid = paidAmountFor(inv.id, payments);
                   const ratio = paymentRatio(inv, payments);
-                  const overdueDays = status === 'overdue' ? daysOverdue(inv, now) : 0;
                   return (
                     <tr
                       key={inv.id}
@@ -357,11 +360,13 @@ function SortableTh({
   const active = sort.by === sortKey;
   const Icon = active && sort.dir === 'asc' ? ChevronUp : ChevronDown;
   return (
-    <th className={cn('font-medium px-5 py-2.5', align === 'right' ? 'text-right' : 'text-left', className)}>
+    <th
+      className={cn('font-medium px-5 py-2.5', align === 'right' ? 'text-right' : 'text-left', className)}
+      aria-sort={active ? (sort.dir === 'asc' ? 'ascending' : 'descending') : undefined}
+    >
       <button
         type="button"
         onClick={() => onToggle(sortKey)}
-        aria-sort={active ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}
         className={cn(
           'inline-flex items-center gap-1 uppercase tracking-wider text-xs transition-colors hover:text-foreground',
           align === 'right' && 'flex-row-reverse',

@@ -24,7 +24,7 @@ import {
 } from '@/lib/server/actions/payments';
 import { setSettingAction } from '@/lib/server/actions/settings';
 import { wipeWorkspaceDataAction } from '@/lib/server/actions/workspace';
-import type { Client, Invoice, Payment, Profile } from './types';
+import type { Client, EditableInvoicePatch, Invoice, Payment, Profile } from './types';
 
 function invalidate(keys: unknown[][]) {
   if (typeof window === 'undefined') return;
@@ -103,7 +103,18 @@ export async function createInvoiceDraft(): Promise<Invoice> {
 
 export async function updateInvoice(id: string, patch: Partial<Invoice>): Promise<void> {
   const { lineItems, ...header } = patch;
-  await updateInvoiceAction(id, header, lineItems);
+  const editableHeader: Omit<EditableInvoicePatch, 'lineItems'> = {};
+  if (header.number !== undefined) editableHeader.number = header.number;
+  if (header.clientId !== undefined) editableHeader.clientId = header.clientId;
+  if (header.issueDate !== undefined) editableHeader.issueDate = header.issueDate;
+  if (header.dueDate !== undefined) editableHeader.dueDate = header.dueDate;
+  if (header.currency !== undefined) editableHeader.currency = header.currency;
+  if (header.defaultTaxRate !== undefined) editableHeader.defaultTaxRate = header.defaultTaxRate;
+  if (header.discount !== undefined) editableHeader.discount = header.discount;
+  if (header.notes !== undefined) editableHeader.notes = header.notes;
+  if (header.paymentInstructions !== undefined) editableHeader.paymentInstructions = header.paymentInstructions;
+  if (header.stripePaymentLink !== undefined) editableHeader.stripePaymentLink = header.stripePaymentLink;
+  await updateInvoiceAction(id, editableHeader, lineItems);
   invalidate([
     ['invoices'],
     ['invoice', id],

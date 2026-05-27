@@ -11,7 +11,7 @@ import {
   updateInvoice,
   voidInvoice,
 } from '@/lib/server/repo/invoices';
-import type { Invoice, LineItem } from '@/lib/types';
+import type { EditableInvoicePatch, Invoice, LineItem } from '@/lib/types';
 
 export async function listInvoicesAction(): Promise<Invoice[]> {
   return listInvoices();
@@ -27,7 +27,7 @@ export async function createInvoiceDraftAction(): Promise<Invoice> {
 
 export async function updateInvoiceAction(
   id: string,
-  patch: Partial<Omit<Invoice, 'lineItems' | 'createdAt' | 'updatedAt'>>,
+  patch: Omit<EditableInvoicePatch, 'lineItems'>,
   items?: LineItem[],
 ): Promise<void> {
   if (Object.keys(patch).length > 0) {

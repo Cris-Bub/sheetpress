@@ -87,6 +87,21 @@ export type Invoice = {
   updatedAt: string;
 };
 
+export type EditableInvoicePatch = Partial<Pick<
+  Invoice,
+  | 'number'
+  | 'clientId'
+  | 'issueDate'
+  | 'dueDate'
+  | 'currency'
+  | 'lineItems'
+  | 'defaultTaxRate'
+  | 'discount'
+  | 'notes'
+  | 'paymentInstructions'
+  | 'stripePaymentLink'
+>>;
+
 export type Payment = {
   id: string;
   invoiceId: string;

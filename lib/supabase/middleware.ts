@@ -5,14 +5,18 @@ import { NextResponse, type NextRequest } from 'next/server';
  * Routes that don't require authentication. Anything not in this set is
  * redirected to /login when the user is signed out.
  *
- * Keep this list tight — public routes are where Phase 4's /pay/[token] will
- * eventually live. Until that ships there's nothing else genuinely public.
+ * Keep this list tight — /pay/[token] is the only public invoice surface.
  */
 function isPublicPath(pathname: string): boolean {
   if (pathname === '/login' || pathname === '/signup') return true;
   if (pathname.startsWith('/auth/')) return true;
-  if (pathname.startsWith('/pay/')) return true; // Phase 4 (placeholder allowance)
+  if (pathname.startsWith('/pay/')) return true;
   return false;
+}
+
+function safeNext(value: string | null): string {
+  if (value && value.startsWith('/') && !value.startsWith('//')) return value;
+  return '/';
 }
 
 export async function updateSession(request: NextRequest) {
@@ -57,10 +61,7 @@ export async function updateSession(request: NextRequest) {
   }
 
   if (user && (pathname === '/login' || pathname === '/signup')) {
-    const next = url.clone();
-    next.pathname = url.searchParams.get('next') || '/';
-    next.search = '';
-    return NextResponse.redirect(next);
+    return NextResponse.redirect(new URL(safeNext(url.searchParams.get('next')), url.origin));
   }
 
   return response;

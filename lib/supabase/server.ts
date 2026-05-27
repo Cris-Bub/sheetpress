@@ -25,7 +25,7 @@ export async function getSupabaseServerClient() {
               cookieStore.set(name, value, options);
             });
           } catch {
-            // RSC context — middleware will refresh on the next request.
+            // RSC context — Proxy will refresh on the next request.
           }
         },
       },
