@@ -1,9 +1,9 @@
 import type { Metadata, Viewport } from 'next';
 import { Inter, Fraunces } from 'next/font/google';
 import { Toaster } from '@/components/ui/sonner';
-import { DevHelper } from '@/components/app/dev-helper';
 import { ServiceWorkerRegister } from '@/components/app/service-worker-register';
 import { ThemeProvider } from '@/components/app/theme-provider';
+import { QueryProvider } from '@/components/app/query-provider';
 import './globals.css';
 
 const inter = Inter({
@@ -11,8 +11,6 @@ const inter = Inter({
   subsets: ['latin'],
 });
 
-// Fraunces — warm variable serif with optical sizing. Less clinical than Instrument Serif,
-// more readable than DM Serif. Personality without being precious.
 const serif = Fraunces({
   variable: '--font-serif',
   subsets: ['latin'],
@@ -48,10 +46,11 @@ export default function RootLayout({
     <html lang="en" className={`${inter.variable} ${serif.variable} h-full antialiased`} suppressHydrationWarning>
       <body className="min-h-full bg-background text-foreground">
         <ThemeProvider>
-          {children}
-          <Toaster position="bottom-right" />
-          <ServiceWorkerRegister />
-          {process.env.NODE_ENV === 'development' ? <DevHelper /> : null}
+          <QueryProvider>
+            {children}
+            <Toaster position="bottom-right" />
+            <ServiceWorkerRegister />
+          </QueryProvider>
         </ThemeProvider>
       </body>
     </html>

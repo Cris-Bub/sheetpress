@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { LayoutDashboard, FileText, Users, Settings, Plus, Menu, X } from 'lucide-react';
+import { LayoutDashboard, FileText, Users, Settings, Plus, Menu, X, LogOut } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
@@ -42,7 +42,34 @@ function NavLinks({ pathname, onNavigate }: { pathname: string; onNavigate?: () 
   );
 }
 
-function SidebarContent({ pathname, onNavigate }: { pathname: string; onNavigate?: () => void }) {
+function AccountFooter({ userEmail, onNavigate }: { userEmail: string; onNavigate?: () => void }) {
+  return (
+    <div className="p-4 border-t border-sidebar-border space-y-2">
+      <p className="text-xs text-muted-foreground truncate" title={userEmail}>
+        {userEmail || 'Signed in'}
+      </p>
+      <form action="/auth/sign-out" method="post" onSubmit={onNavigate}>
+        <button
+          type="submit"
+          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <LogOut className="size-3.5" />
+          Sign out
+        </button>
+      </form>
+    </div>
+  );
+}
+
+function SidebarContent({
+  pathname,
+  userEmail,
+  onNavigate,
+}: {
+  pathname: string;
+  userEmail: string;
+  onNavigate?: () => void;
+}) {
   return (
     <>
       <div className="px-5 pt-6 pb-4">
@@ -66,21 +93,15 @@ function SidebarContent({ pathname, onNavigate }: { pathname: string; onNavigate
         <NavLinks pathname={pathname} onNavigate={onNavigate} />
       </nav>
 
-      <div className="p-4 text-xs text-muted-foreground">
-        <p>Your data lives on this device.</p>
-        <Link href="/settings" onClick={onNavigate} className="underline-offset-4 hover:underline">
-          Back up now →
-        </Link>
-      </div>
+      <AccountFooter userEmail={userEmail} onNavigate={onNavigate} />
     </>
   );
 }
 
-export function AppSidebar() {
+export function AppSidebar({ userEmail }: { userEmail: string }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
 
-  // Lock body scroll while open.
   useEffect(() => {
     if (!open) return;
     const original = document.body.style.overflow;
@@ -90,7 +111,6 @@ export function AppSidebar() {
     };
   }, [open]);
 
-  // Esc to close.
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -102,7 +122,6 @@ export function AppSidebar() {
 
   return (
     <>
-      {/* Mobile top bar */}
       <header className="md:hidden sticky top-0 z-20 flex items-center justify-between h-12 px-3 border-b border-border bg-background/95 backdrop-blur">
         <button
           type="button"
@@ -121,7 +140,6 @@ export function AppSidebar() {
         </Button>
       </header>
 
-      {/* Mobile drawer */}
       {open ? (
         <div className="fixed inset-0 z-30 md:hidden" role="dialog" aria-modal="true">
           <div
@@ -137,14 +155,13 @@ export function AppSidebar() {
             >
               <X className="size-4" />
             </button>
-            <SidebarContent pathname={pathname} onNavigate={() => setOpen(false)} />
+            <SidebarContent pathname={pathname} userEmail={userEmail} onNavigate={() => setOpen(false)} />
           </aside>
         </div>
       ) : null}
 
-      {/* Desktop sidebar */}
       <aside className="hidden md:flex w-[220px] shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground">
-        <SidebarContent pathname={pathname} />
+        <SidebarContent pathname={pathname} userEmail={userEmail} />
       </aside>
     </>
   );

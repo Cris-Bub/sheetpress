@@ -14,6 +14,7 @@ import {
   Plus,
   Trash2,
   Share2,
+  Link2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -21,6 +22,7 @@ import { StatusBadge } from '@/components/app/status-badge';
 import { InvoicePreview } from '@/components/app/invoice-preview';
 import { RecordPaymentDialog } from '@/components/app/record-payment-dialog';
 import { ConfirmDialog } from '@/components/app/confirm-dialog';
+import { ShareLinkDialog } from '@/components/app/share-link-dialog';
 import { useInvoice, usePaymentsForInvoice, isLoaded } from '@/lib/queries';
 import {
   duplicateInvoice,
@@ -43,6 +45,7 @@ export function InvoiceDetailView({ id }: { id: string }) {
   const [voiding, setVoiding] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [working, setWorking] = useState(false);
+  const [shareLinkOpen, setShareLinkOpen] = useState(false);
 
   if (!isLoaded(invoice) || !isLoaded(payments)) {
     return (
@@ -182,6 +185,20 @@ export function InvoiceDetailView({ id }: { id: string }) {
               <span className="hidden lg:inline">Download PDF</span>
             </Button>
             <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShareLinkOpen(true)}
+              disabled={invoice.status === 'draft'}
+              title={
+                invoice.status === 'draft'
+                  ? 'Mark this invoice sent to create a share link'
+                  : 'Create or copy a hosted link to this invoice'
+              }
+            >
+              <Link2 className="size-3.5" />
+              <span className="hidden lg:inline">Copy link</span>
+            </Button>
+            <Button
               size="sm"
               onClick={handleShare}
               title={
@@ -196,6 +213,12 @@ export function InvoiceDetailView({ id }: { id: string }) {
           </div>
         </div>
       </div>
+
+      <ShareLinkDialog
+        invoiceId={invoice.id}
+        open={shareLinkOpen}
+        onOpenChange={setShareLinkOpen}
+      />
 
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_320px] gap-8 px-4 sm:px-8 py-4 sm:py-8 max-w-[1400px] mx-auto w-full">
         <div className="-mx-4 sm:mx-0 overflow-x-auto">

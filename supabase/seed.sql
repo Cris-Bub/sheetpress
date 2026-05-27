@@ -1,0 +1,9 @@
+-- sheetPress SaaS fork — local seed.
+--
+-- Intentionally empty. Real local development data is created interactively:
+-- sign up at /signup, complete onboarding, create your first invoice.
+-- This matches the production flow rather than starting in a contrived state.
+--
+-- If you want a fast-iteration seed for UI work, add fixtures here and run
+-- `supabase db reset` to replay them. Keep them realistic — don't seed values
+-- the app would reject in production.

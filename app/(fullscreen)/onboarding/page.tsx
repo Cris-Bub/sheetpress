@@ -143,7 +143,7 @@ export default function Onboarding() {
             </div>
 
             <div className="rounded-md border border-border bg-muted/40 p-4 text-sm text-muted-foreground">
-              <span className="font-medium text-foreground">A heads up.</span> Your data lives on this device only — fast, private, free. Export a backup once you start adding invoices.
+              <span className="font-medium text-foreground">A heads up.</span> Your data lives in your sheetPress account — synced and backed up. You can still download an export anytime.
             </div>
 
             <div className="flex items-center justify-between pt-2">

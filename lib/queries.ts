@@ -1,77 +1,120 @@
 'use client';
 
-import { useLiveQuery } from 'dexie-react-hooks';
-import { db } from './db';
+import { useQuery } from '@tanstack/react-query';
+import {
+  getActiveProfileAction,
+  getActiveProfileIdAction,
+  getProfileAction,
+  listProfilesAction,
+} from '@/lib/server/actions/profiles';
+import { getClientAction, listClientsAction } from '@/lib/server/actions/clients';
+import { getInvoiceAction, listInvoicesAction } from '@/lib/server/actions/invoices';
+import {
+  listPaymentsAction,
+  listPaymentsForInvoiceAction,
+} from '@/lib/server/actions/payments';
+import { getSettingAction } from '@/lib/server/actions/settings';
 
-/** Returns the currently active profile. Falls back to the first if no active is set.
- *  undefined while loading; null when no profiles exist. */
+// ---- Profile ----
+
 export function useProfile() {
-  return useLiveQuery(async () => {
-    const activeRow = await db.settings.get('activeProfileId');
-    const activeId = typeof activeRow?.value === 'string' ? activeRow.value : null;
-    if (activeId) {
-      const found = await db.profiles.get(activeId);
-      if (found) return found;
-    }
-    const p = await db.profiles.toCollection().first();
-    return p ?? null;
-  }, []);
+  return useQuery({
+    queryKey: ['profile', 'active'],
+    queryFn: getActiveProfileAction,
+  }).data;
 }
 
-/** Returns all profiles, name-sorted. undefined while loading. */
 export function useProfiles() {
-  return useLiveQuery(() => db.profiles.toArray(), []);
+  return useQuery({
+    queryKey: ['profiles'],
+    queryFn: listProfilesAction,
+  }).data;
 }
 
-/** Returns just the active profile id (or null). */
 export function useActiveProfileId() {
-  return useLiveQuery(async () => {
-    const row = await db.settings.get('activeProfileId');
-    return typeof row?.value === 'string' ? row.value : null;
-  }, []);
+  return useQuery({
+    queryKey: ['profile', 'active', 'id'],
+    queryFn: getActiveProfileIdAction,
+  }).data;
 }
+
+export function useProfileById(id: string | undefined) {
+  const q = useQuery({
+    queryKey: ['profile', id ?? 'none'],
+    queryFn: () => (id ? getProfileAction(id) : null),
+    enabled: !!id,
+  });
+  if (!id) return null;
+  return q.data;
+}
+
+// ---- Clients ----
 
 export function useClients() {
-  return useLiveQuery(() => db.clients.orderBy('name').toArray(), []);
+  return useQuery({
+    queryKey: ['clients'],
+    queryFn: listClientsAction,
+  }).data;
 }
 
 export function useClient(id: string | undefined) {
-  return useLiveQuery(async () => {
-    if (!id) return null;
-    return (await db.clients.get(id)) ?? null;
-  }, [id]);
+  const q = useQuery({
+    queryKey: ['client', id ?? 'none'],
+    queryFn: () => (id ? getClientAction(id) : null),
+    enabled: !!id,
+  });
+  if (!id) return null;
+  return q.data;
 }
 
+// ---- Invoices ----
+
 export function useInvoices() {
-  return useLiveQuery(() => db.invoices.orderBy('issueDate').reverse().toArray(), []);
+  return useQuery({
+    queryKey: ['invoices'],
+    queryFn: listInvoicesAction,
+  }).data;
 }
 
 export function useInvoice(id: string | undefined) {
-  return useLiveQuery(async () => {
-    if (!id) return null;
-    return (await db.invoices.get(id)) ?? null;
-  }, [id]);
+  const q = useQuery({
+    queryKey: ['invoice', id ?? 'none'],
+    queryFn: () => (id ? getInvoiceAction(id) : null),
+    enabled: !!id,
+  });
+  if (!id) return null;
+  return q.data;
 }
 
+// ---- Payments ----
+
 export function usePayments() {
-  return useLiveQuery(() => db.payments.orderBy('date').reverse().toArray(), []);
+  return useQuery({
+    queryKey: ['payments'],
+    queryFn: listPaymentsAction,
+  }).data;
 }
 
 export function usePaymentsForInvoice(invoiceId: string | undefined) {
-  return useLiveQuery(async () => {
-    if (!invoiceId) return [];
-    return db.payments.where('invoiceId').equals(invoiceId).reverse().sortBy('date');
-  }, [invoiceId]);
+  const q = useQuery({
+    queryKey: ['payments', 'invoice', invoiceId ?? 'none'],
+    queryFn: () => (invoiceId ? listPaymentsForInvoiceAction(invoiceId) : []),
+    enabled: !!invoiceId,
+  });
+  if (!invoiceId) return [];
+  return q.data;
 }
+
+// ---- Settings k/v ----
 
 export function useSetting<T = unknown>(key: string) {
-  return useLiveQuery(async () => {
-    const row = await db.settings.get(key);
-    return (row?.value as T | undefined) ?? null;
-  }, [key]);
+  return useQuery({
+    queryKey: ['setting', key],
+    queryFn: () => getSettingAction<T>(key),
+  }).data;
 }
 
-/** Loaded-state guard: returns true once a Dexie query has resolved (not undefined). */
+/** Loaded-state guard: returns true once a query has resolved (not undefined). */
 export function isLoaded<T>(value: T | undefined): value is T {
   return value !== undefined;
 }

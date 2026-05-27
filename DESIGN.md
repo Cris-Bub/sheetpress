@@ -192,3 +192,42 @@ Why: simpler model than "drafts release their number" — one rule, no edge case
 ## 12. Living document
 
 When you make a design decision that wasn't covered here — adding a new pattern, picking a new hue, defining how a new component should behave — **add it to this doc in the relevant section**. If your decision contradicts something here, update the conflict explicitly rather than leaving it stale.
+
+---
+
+## 13. Setup-gated features (SaaS fork only)
+
+> Applies to the `codex/saas-fork` branch. The local-first `main` branch has no setup-gated features.
+
+The SaaS fork unlocks things behind external accounts the user has to connect (Stripe for online payments, Postmark for app email, Gmail OAuth for send-from-your-inbox). Onboarding pressure here is the failure mode — a freelancer should be able to land in the app and write their first invoice in under a minute, without ever seeing a setup prompt.
+
+**The rule:** **never block manual invoicing.** Setup belongs where the feature is used, not in the app shell.
+
+**Where setup prompts live:**
+
+- **Settings → Payments / Email** is the *only* place that surfaces setup as a primary task. A dedicated tab, no nag.
+- **The invoice editor** may show a quiet inline hint (one line, muted text, no card, no icon, no CTA-shaped button) when the user is *about to do* the thing — e.g. "Add a Stripe connection in Settings → Payments to collect online" appears next to the "Pay online" section, only when that section is being edited.
+- **The send/share affordance** shows a quiet inline state — the "Send from app email" option in the share menu reads "Set up app email in Settings" and is disabled. No modal, no full-card upsell.
+
+**Where setup prompts must not live:**
+
+- The dashboard.
+- The sidebar (no badge, no dot, no count).
+- The empty state of any list (no "Connect Stripe to get started").
+- A first-run wizard step. The wizard captures profile info only.
+- Toast notifications. Setup is never a transient message.
+- Status bar / global header.
+
+**Tone:**
+
+- Quiet, factual, one line. "Connect Stripe in Settings → Payments to collect online." Not "Unlock payments in seconds!"
+- Never use the accent color for a setup prompt — the accent is for the user's own brand. Use muted-foreground.
+- Never use a badge/pill ("New", "Pro", "Required"). The whole app has no pricing tiers, and the SaaS fork keeps it that way visually.
+
+**Disabled state for not-yet-set-up features:**
+
+- The control stays where it would be when enabled. We don't hide it.
+- It's visibly disabled (the same disabled state we use elsewhere — reduced opacity, no hover).
+- A short hover/title attribute explains *why* it's disabled and *where* to enable it. That's it.
+
+**Why this matters:** sheetPress's identity is "a tool, not a hub." The SaaS fork still has to feel that way even though it acquires real backend dependencies. If a freelancer wants to use it to type up a manual-paid invoice and never connect Stripe, that should be a completely good experience — no nags, no half-finished UI, no upsell pressure.

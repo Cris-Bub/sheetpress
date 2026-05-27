@@ -2,6 +2,8 @@
 
 > Working title. A free, open-source, minimal invoicing app for freelancers and small businesses. A tool, not a hub.
 
+> **Branch note — `codex/saas-fork`:** this is the hosted SaaS track of sheetPress. The local-first description below still describes the product core; the SaaS fork keeps that core and adds hosted accounts, server-backed data, payable invoice links, app email, and reminders. The items moved out of §9 below are *in scope* on this branch. The execution plan lives in [SAAS-PLAN.md](SAAS-PLAN.md). The `main` branch remains local-first.
+
 ---
 
 ## 1. Vision & Principles
@@ -318,15 +320,20 @@ type Address = {
 
 ## 9. Out of scope (v1)
 
-Saying no explicitly so the principles hold:
+> **Branch note — `codex/saas-fork`:** the items marked **`(in scope on this branch)`** are deliberately re-opened for the hosted SaaS fork. Phasing is in [SAAS-PLAN.md](SAAS-PLAN.md). The `main` branch keeps the original "no" on these.
 
-- **Payment processing.** No Stripe/PayPal account hookup. We show payment instructions; the user collects money on their own rails.
-- **Time tracking / project management.** Use Toggl, Harvest, or paper.
-- **Recurring invoices.** v2.
+Saying no explicitly so the principles hold (for the local-first track):
+
+- **Payment processing.** `(in scope on this branch — Phase 5, Stripe Connect Standard / direct charges. The freelancer owns the Stripe relationship; we are not the merchant of record.)` On `main`: no Stripe/PayPal hookup, payment instructions only.
+- **Hosted invoice links.** `(in scope on this branch — Phase 4. Public, opaque-token routes at /pay/[token] backed by Supabase Storage for the frozen PDF.)` On `main`: not a feature — the user shares a PDF.
+- **App email sending and reminders.** `(in scope on this branch — Phase 7. Postmark for transactional sending and PDF attachments; per-schedule-item reminders run by a manual endpoint in dev and Supabase Cron in prod.)` On `main`: lightweight handoff via Web Share + `mailto:` only.
+- **Optional inbox-OAuth email sending (Gmail send-only).** `(in scope on this branch — Phase 7, optional. gmail.send scope only; we never read the inbox. Refresh tokens encrypted at rest.)` On `main`: stays out.
+- **Reply tracking.** `(in scope on this branch — Phase 8, Postmark inbound + reply+<token>@domain aliases.)` On `main`: stays out.
+- **Hosted multi-user / teams.** `(partially in scope on this branch — workspaces and memberships exist in the schema from Phase 1 to make later team work cheap, but the UI keeps a single-workspace experience in v1.)` On `main`: stays a single-user tool.
+- **Time tracking / project management.** Use Toggl, Harvest, or paper. Stays out on both branches.
+- **Recurring invoices.** v2 on both branches.
 - **Quotes / estimates.** v2 — relatively cheap addition since the data model is mostly the same.
-- **Multi-user / teams.** This is a tool for one person. Not a SaaS.
-- **Inbox-OAuth email sending (Gmail/Outlook).** We ship the lightweight handoff in §6.3.1 (Web Share API + `mailto:`) which keeps the app backend-free. Full OAuth-into-the-user's-inbox sending stays out of scope to avoid Google's Restricted Scope verification, token storage, and a hosted backend.
-- **Expense tracking.**
+- **Expense tracking.** Stays out on both branches.
 - **Reports beyond the dashboard.** Export to CSV/JSON for anything else.
 - **AI features.** Not until there's a concrete problem one solves better than a form.
 

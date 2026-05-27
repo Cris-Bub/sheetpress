@@ -21,7 +21,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { createClient, updateClient } from '@/lib/mutations';
-import { db } from '@/lib/db';
+import { getClientAction } from '@/lib/server/actions/clients';
 import type { Client } from '@/lib/types';
 
 const CURRENCIES = ['USD', 'EUR', 'GBP', 'CAD', 'AUD', 'CHF', 'SEK', 'DKK', 'NOK', 'JPY'];
@@ -140,7 +140,7 @@ export function ClientFormDialog({
           defaultCurrency: currency,
           address: addressPatch,
         });
-        const fresh = await db.clients.get(existing.id);
+        const fresh = await getClientAction(existing.id);
         toast.success(`Updated ${name.trim()}.`);
         if (fresh) onSaved?.(fresh);
         onOpenChange(false);

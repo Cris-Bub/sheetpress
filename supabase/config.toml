@@ -1,0 +1,59 @@
+# sheetPress SaaS fork — local Supabase config.
+# Tweak ports here if 543xx conflicts with another local stack.
+
+project_id = "sheetpress-saas"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 54322
+shadow_port = 54320
+major_version = 17
+
+[db.pooler]
+enabled = false
+
+[realtime]
+enabled = true
+
+[studio]
+enabled = true
+port = 54323
+api_url = "http://127.0.0.1"
+
+# Inbucket — local SMTP catcher. View confirmation/magic-link emails at
+# http://127.0.0.1:54324 while running the local stack.
+[inbucket]
+enabled = true
+port = 54324
+
+[storage]
+enabled = true
+file_size_limit = "50MiB"
+
+[auth]
+enabled = true
+# Site URL — used for magic links, password reset, OAuth redirects.
+site_url = "http://localhost:3000"
+additional_redirect_urls = ["http://localhost:3000", "http://localhost:3000/auth/callback"]
+jwt_expiry = 3600
+enable_signup = true
+enable_anonymous_sign_ins = false
+
+[auth.email]
+enable_signup = true
+double_confirm_changes = true
+# Local dev convenience: auto-confirm signups so you don't have to click the
+# inbucket link every time. Re-enable for staging/production by setting this
+# to true (and configuring SMTP).
+enable_confirmations = false
+secure_password_change = false
+
+# OAuth providers — disabled by default. Enable per-provider when you wire them up.
+[auth.external.google]
+enabled = false

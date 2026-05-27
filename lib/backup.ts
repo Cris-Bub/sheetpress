@@ -1,107 +1,21 @@
+'use client';
+
 import JSZip from 'jszip';
-import { db } from './db';
+import { listProfilesAction } from '@/lib/server/actions/profiles';
+import { listClientsAction } from '@/lib/server/actions/clients';
+import { listInvoicesAction } from '@/lib/server/actions/invoices';
+import { listPaymentsAction } from '@/lib/server/actions/payments';
+import { importBackupJsonAction, type ImportResult } from '@/lib/server/actions/backup';
 import { setSetting, wipeAllData } from './mutations';
 import { renderInvoiceToBlob, pdfFileName } from './pdf';
 import { computeTotals, toMajor } from './format';
 import { paidAmountFor } from './derive';
-import type { Client, Invoice, Payment, Profile } from './types';
-import { z } from 'zod';
+import { getQueryClient } from './query-client';
+import type { Invoice, Payment } from './types';
 
 const BACKUP_VERSION = 1;
 
-const AddressSchema = z.object({
-  line1: z.string(),
-  line2: z.string().optional(),
-  city: z.string(),
-  region: z.string().optional(),
-  postalCode: z.string(),
-  country: z.string(),
-});
-
-const ProfileSchema = z.object({
-  id: z.string(),
-  businessName: z.string(),
-  legalName: z.string().optional(),
-  taxId: z.string().optional(),
-  taxIdLabel: z.string().optional(),
-  email: z.string(),
-  phone: z.string().optional(),
-  address: AddressSchema,
-  logoDataUrl: z.string().optional(),
-  defaultPaymentInstructions: z.string().optional(),
-  defaultPaymentTermsDays: z.number(),
-  defaultNotes: z.string().optional(),
-  defaultCurrency: z.string(),
-  defaultTaxRate: z.number().optional(),
-  accentColor: z.string(),
-  invoiceNumberFormat: z.string(),
-  nextInvoiceNumber: z.number(),
-});
-
-const ClientSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  contactName: z.string().optional(),
-  email: z.string().optional(),
-  taxId: z.string().optional(),
-  address: AddressSchema.optional(),
-  defaultCurrency: z.string().optional(),
-  notes: z.string().optional(),
-  createdAt: z.string(),
-  archivedAt: z.string().optional(),
-});
-
-const LineItemSchema = z.object({
-  id: z.string(),
-  description: z.string(),
-  quantity: z.number(),
-  unitPrice: z.number(),
-  taxRate: z.number().optional(),
-});
-
-const InvoiceSchema = z.object({
-  id: z.string(),
-  number: z.string(),
-  profileId: z.string(),
-  clientId: z.string(),
-  clientSnapshot: ClientSchema,
-  profileSnapshot: ProfileSchema,
-  issueDate: z.string(),
-  dueDate: z.string(),
-  currency: z.string(),
-  lineItems: z.array(LineItemSchema),
-  defaultTaxRate: z.number().optional(),
-  discount: z
-    .union([
-      z.object({ type: z.literal('percent'), value: z.number() }),
-      z.object({ type: z.literal('amount'), value: z.number() }),
-    ])
-    .optional(),
-  notes: z.string().optional(),
-  paymentInstructions: z.string().optional(),
-  stripePaymentLink: z.string().optional(),
-  status: z.enum(['draft', 'sent', 'paid', 'partial', 'overdue', 'void']),
-  createdAt: z.string(),
-  updatedAt: z.string(),
-});
-
-const PaymentSchema = z.object({
-  id: z.string(),
-  invoiceId: z.string(),
-  date: z.string(),
-  amount: z.number(),
-  method: z.string().optional(),
-  note: z.string().optional(),
-});
-
-const BackupSchema = z.object({
-  version: z.number(),
-  exportedAt: z.string(),
-  profiles: z.array(ProfileSchema),
-  clients: z.array(ClientSchema),
-  invoices: z.array(InvoiceSchema),
-  payments: z.array(PaymentSchema),
-});
+// ---- helpers (lifted from the local-first backup.ts) ----
 
 function todayStamp(): string {
   return new Date().toISOString().slice(0, 10);
@@ -181,17 +95,14 @@ function paymentsCsv(invoices: Invoice[], payments: Payment[]): string {
   return rows.join('\n');
 }
 
-/**
- * Builds a ZIP containing `data.json`, `invoices.csv`, `payments.csv`, and one PDF
- * per non-draft, non-void invoice. Triggers a browser download and records
- * `lastBackupAt` in settings.
- */
+// ---- exports ----
+
 export async function exportEverything(): Promise<{ invoiceCount: number; pdfCount: number }> {
   const [profiles, clients, invoices, payments] = await Promise.all([
-    db.profiles.toArray(),
-    db.clients.toArray(),
-    db.invoices.toArray(),
-    db.payments.toArray(),
+    listProfilesAction(),
+    listClientsAction(),
+    listInvoicesAction(),
+    listPaymentsAction(),
   ]);
 
   const data = {
@@ -214,7 +125,6 @@ export async function exportEverything(): Promise<{ invoiceCount: number; pdfCou
       pdfFolder!.file(pdfFileName(inv), blob);
       pdfCount++;
     } catch (err) {
-      // PDF failures shouldn't block the whole export — the JSON still has the data.
       console.warn(`Failed to render PDF for ${inv.number}:`, err);
     }
   }
@@ -226,15 +136,12 @@ export async function exportEverything(): Promise<{ invoiceCount: number; pdfCou
   return { invoiceCount: invoices.length, pdfCount };
 }
 
-/**
- * Builds a ZIP scoped to a single tax year: includes invoices issued OR paid in
- * the year, plus all payments dated in the year. Result is `sheetpress-{year}-tax.zip`.
- */
-export async function exportTaxYear(year: number): Promise<{ invoiceCount: number; paymentCount: number; pdfCount: number }> {
-  const [invoices, payments] = await Promise.all([
-    db.invoices.toArray(),
-    db.payments.toArray(),
-  ]);
+export async function exportTaxYear(year: number): Promise<{
+  invoiceCount: number;
+  paymentCount: number;
+  pdfCount: number;
+}> {
+  const [invoices, payments] = await Promise.all([listInvoicesAction(), listPaymentsAction()]);
 
   const yearPayments = payments.filter((p) => new Date(p.date).getFullYear() === year);
   const paymentInvoiceIds = new Set(yearPayments.map((p) => p.invoiceId));
@@ -284,50 +191,18 @@ export async function exportTaxYear(year: number): Promise<{ invoiceCount: numbe
   return { invoiceCount: yearInvoices.length, paymentCount: yearPayments.length, pdfCount };
 }
 
-/**
- * Reads a backup ZIP, validates the JSON shape with Zod, and writes the data
- * back to Dexie in a single transaction. Dedupes invoices by (number, issueDate).
- */
-export async function importBackup(file: File): Promise<{
-  profiles: number; clients: number; invoices: number; payments: number; skipped: number;
-}> {
+export async function importBackup(file: File): Promise<ImportResult> {
   const zip = await JSZip.loadAsync(file);
   const dataFile = zip.file('data.json');
   if (!dataFile) throw new Error('Invalid backup: missing data.json');
-  const json = JSON.parse(await dataFile.async('string'));
-  const parsed = BackupSchema.parse(json);
-
-  return db.transaction('rw', db.profiles, db.clients, db.invoices, db.payments, async () => {
-    const existingInvoices = await db.invoices.toArray();
-    const seen = new Set(existingInvoices.map((i) => `${i.number}@${i.issueDate}`));
-
-    await db.profiles.bulkPut(parsed.profiles);
-    await db.clients.bulkPut(parsed.clients);
-
-    let skipped = 0;
-    const toAdd: Invoice[] = [];
-    for (const inv of parsed.invoices as Invoice[]) {
-      const key = `${inv.number}@${inv.issueDate}`;
-      if (seen.has(key)) { skipped++; continue; }
-      seen.add(key);
-      toAdd.push(inv);
-    }
-    await db.invoices.bulkPut(toAdd);
-    await db.payments.bulkPut(parsed.payments as Payment[]);
-
-    return {
-      profiles: parsed.profiles.length,
-      clients: parsed.clients.length,
-      invoices: toAdd.length,
-      payments: parsed.payments.length,
-      skipped,
-    };
-  });
+  const json = await dataFile.async('string');
+  const result = await importBackupJsonAction(json);
+  if (typeof window !== 'undefined') {
+    getQueryClient().clear();
+  }
+  return result;
 }
 
 export async function wipeWithConfirm(): Promise<void> {
   await wipeAllData();
 }
-
-// Reuse the type-only marker
-export type _Unused = Profile & Client & Invoice & Payment;

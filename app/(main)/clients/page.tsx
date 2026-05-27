@@ -222,7 +222,7 @@ export default function ClientsPage() {
         open={createOpen}
         onOpenChange={setCreateOpen}
         defaultCurrency={profile?.defaultCurrency ?? 'USD'}
-        onCreated={(client) => router.push(`/clients/${client.id}`)}
+        onSaved={(client) => router.push(`/clients/${client.id}`)}
       />
     </>
   );
